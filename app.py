@@ -49,12 +49,18 @@ def get_conn():
     return conn
 
 
-def resumen_acciones():
-    """Calcula totales de acciones por estado y retornos de quórum."""
+def resumen_acciones(votacion_id=None):
+    """Calcula totales de acciones por estado para una votación."""
     conn = get_conn()
-    rows = conn.execute(
-        'SELECT estado, SUM(acciones) AS acciones FROM asistencia GROUP BY estado'
-    ).fetchall()
+    if votacion_id is None:
+        rows = conn.execute(
+            'SELECT estado, SUM(acciones) AS acciones FROM asistencia GROUP BY estado'
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            'SELECT estado, SUM(acciones) AS acciones FROM asistencia WHERE votacion_id=? GROUP BY estado',
+            (votacion_id,)
+        ).fetchall()
     conn.close()
     data = {r['estado']: r['acciones'] or 0 for r in rows}
     total = sum(data.values())
@@ -141,12 +147,16 @@ def panel_admin():
         GROUP BY u.id
     ''').fetchall()
     votaciones = conn.execute('''
-        SELECT v.id, v.nombre, v.fecha,
+        SELECT v.id, v.nombre, v.fecha, v.quorum_minimo,
                COUNT(DISTINCT p.id) AS num_preguntas,
-               COUNT(DISTINCT CASE WHEN vu.rol = 'asistencia' THEN vu.user_id END) AS asistentes
+               COUNT(DISTINCT CASE WHEN vu.rol = 'asistencia' THEN vu.user_id END) AS asistentes,
+               COUNT(DISTINCT CASE WHEN vu.rol = 'votante' THEN vu.user_id END) AS votantes,
+               GROUP_CONCAT(DISTINCT CASE WHEN vu.rol = 'asistencia' THEN u.username END) AS asistentes_nombres,
+               GROUP_CONCAT(DISTINCT CASE WHEN vu.rol = 'votante' THEN u.username END) AS votantes_nombres
         FROM votaciones v
         LEFT JOIN preguntas p ON p.votacion_id = v.id
         LEFT JOIN votacion_usuarios vu ON vu.votacion_id = v.id
+        LEFT JOIN users u ON vu.user_id = u.id
         GROUP BY v.id
     ''').fetchall()
     conn.close()
@@ -169,10 +179,15 @@ def panel_asistencia():
 @requires_role('votante')
 def panel_votacion():
     conn = get_conn()
-    votaciones = conn.execute('''SELECT v.* FROM votaciones v
-                                 JOIN votacion_usuarios vu ON v.id = vu.votacion_id
-                                 WHERE vu.user_id = ? AND vu.rol = 'votante' ''',
-                               (g.user['id'],)).fetchall()
+    rows = conn.execute('''SELECT v.* FROM votaciones v
+                           JOIN votacion_usuarios vu ON v.id = vu.votacion_id
+                           WHERE vu.user_id = ? AND vu.rol = 'votante' ''',
+                         (g.user['id'],)).fetchall()
+    votaciones = []
+    for v in rows:
+        total, activos, _ = resumen_acciones(v['id'])
+        pct = (activos / total * 100) if total else 0
+        votaciones.append({**dict(v), 'quorum_ok': pct >= (v['quorum_minimo'] or 0), 'porcentaje': pct})
     conn.close()
     return render_template('votante_panel.html', votaciones=votaciones)
 
@@ -236,11 +251,13 @@ def admin_create_votacion():
     if data:
         nombre = data.get('nombre_votacion')
         fecha = data.get('fecha') or None
+        quorum = float(data.get('quorum_minimo') or 0)
         preguntas = data.get('preguntas', [])
-        usuarios = [int(u) for u in data.get('usuarios', [])]
+        votantes = [int(u) for u in data.get('votantes', [])]
+        asistentes = [int(u) for u in data.get('asistentes', [])]
         conn = get_conn()
         cur = conn.cursor()
-        cur.execute('INSERT INTO votaciones (nombre, fecha) VALUES (?, ?)', (nombre, fecha))
+        cur.execute('INSERT INTO votaciones (nombre, fecha, quorum_minimo) VALUES (?,?,?)', (nombre, fecha, quorum))
         votacion_id = cur.lastrowid
         for p in preguntas:
             texto = p.get('texto', '').strip()
@@ -252,9 +269,14 @@ def admin_create_votacion():
                 opt = opt.strip()
                 if opt:
                     cur.execute('INSERT INTO opciones (pregunta_id, texto) VALUES (?, ?)', (pregunta_id, opt))
-        for uid in usuarios:
+        for uid in votantes:
             try:
                 cur.execute('INSERT INTO votacion_usuarios (votacion_id, user_id, rol) VALUES (?,?,?)', (votacion_id, uid, 'votante'))
+            except sqlite3.IntegrityError:
+                pass
+        for uid in asistentes:
+            try:
+                cur.execute('INSERT INTO votacion_usuarios (votacion_id, user_id, rol) VALUES (?,?,?)', (votacion_id, uid, 'asistencia'))
             except sqlite3.IntegrityError:
                 pass
         conn.commit()
@@ -309,10 +331,20 @@ def admin_edit_votacion(votacion_id):
     for p in conn.execute('SELECT * FROM preguntas WHERE votacion_id=?', (votacion_id,)).fetchall():
         opts = conn.execute('SELECT texto FROM opciones WHERE pregunta_id=?', (p['id'],)).fetchall()
         preguntas.append({'texto': p['texto'], 'opciones': [o['texto'] for o in opts]})
-    asignados = [r['user_id'] for r in conn.execute('SELECT user_id FROM votacion_usuarios WHERE votacion_id=?', (votacion_id,)).fetchall()]
+    asignados = conn.execute('SELECT user_id, rol FROM votacion_usuarios WHERE votacion_id=?', (votacion_id,)).fetchall()
+    votantes = [r['user_id'] for r in asignados if r['rol'] == 'votante']
+    asistentes = [r['user_id'] for r in asignados if r['rol'] == 'asistencia']
     users = conn.execute('SELECT id, username, role FROM users').fetchall()
     conn.close()
-    data = {'id': votacion['id'], 'nombre': votacion['nombre'], 'fecha': votacion['fecha'], 'preguntas': preguntas, 'usuarios': asignados}
+    data = {
+        'id': votacion['id'],
+        'nombre': votacion['nombre'],
+        'fecha': votacion['fecha'],
+        'quorum_minimo': votacion['quorum_minimo'],
+        'preguntas': preguntas,
+        'votantes': votantes,
+        'asistentes': asistentes,
+    }
     return render_template('edit_votacion.html', data=data, users=users)
 
 @app.route('/admin/votacion/<int:votacion_id>/update', methods=['POST'])
@@ -321,11 +353,13 @@ def admin_update_votacion(votacion_id):
     data = request.get_json(silent=True) or {}
     nombre = data.get('nombre_votacion')
     fecha = data.get('fecha') or None
+    quorum = float(data.get('quorum_minimo') or 0)
     preguntas = data.get('preguntas', [])
-    usuarios = [int(u) for u in data.get('usuarios', [])]
+    votantes = [int(u) for u in data.get('votantes', [])]
+    asistentes = [int(u) for u in data.get('asistentes', [])]
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute('UPDATE votaciones SET nombre=?, fecha=? WHERE id=?', (nombre, fecha, votacion_id))
+    cur.execute('UPDATE votaciones SET nombre=?, fecha=?, quorum_minimo=? WHERE id=?', (nombre, fecha, quorum, votacion_id))
     cur.execute('DELETE FROM opciones WHERE pregunta_id IN (SELECT id FROM preguntas WHERE votacion_id=?)', (votacion_id,))
     cur.execute('DELETE FROM preguntas WHERE votacion_id=?', (votacion_id,))
     for p in preguntas:
@@ -339,9 +373,14 @@ def admin_update_votacion(votacion_id):
             if opt:
                 cur.execute('INSERT INTO opciones (pregunta_id, texto) VALUES (?, ?)', (pregunta_id, opt))
     cur.execute('DELETE FROM votacion_usuarios WHERE votacion_id=?', (votacion_id,))
-    for uid in usuarios:
+    for uid in votantes:
         try:
             cur.execute('INSERT INTO votacion_usuarios (votacion_id, user_id, rol) VALUES (?,?,?)', (votacion_id, uid, 'votante'))
+        except sqlite3.IntegrityError:
+            pass
+    for uid in asistentes:
+        try:
+            cur.execute('INSERT INTO votacion_usuarios (votacion_id, user_id, rol) VALUES (?,?,?)', (votacion_id, uid, 'asistencia'))
         except sqlite3.IntegrityError:
             pass
     conn.commit()
@@ -366,8 +405,9 @@ def admin_asignar():
 @requires_role('asistencia', 'admin')
 def upload():
     f = request.files.get('file')
-    if not f:
-        return jsonify({'error': 'No file provided'}), 400
+    votacion_id = request.form.get('votacion_id', type=int)
+    if not f or not votacion_id:
+        return jsonify({'error': 'Datos incompletos'}), 400
     name = secure_filename(f.filename)
     ext = name.rsplit('.', 1)[-1].lower()
     if ext not in ALLOWED_EXT:
@@ -388,11 +428,12 @@ def upload():
         with db_lock:
             conn = get_conn()
             try:
-                conn.execute('DELETE FROM asistencia')
+                conn.execute('DELETE FROM asistencia WHERE votacion_id=?', (votacion_id,))
                 for _, r in df.iterrows():
                     conn.execute(
-                        'INSERT INTO asistencia (accionista,representante,apoderado,acciones,estado) VALUES (?,?,?,?,?)',
+                        'INSERT INTO asistencia (votacion_id, accionista,representante,apoderado,acciones,estado) VALUES (?,?,?,?,?,?)',
                         (
+                            votacion_id,
                             r.get('ACCIONISTA'),
                             r.get('REPRESENTANTE LEGAL'),
                             r.get('APODERADO'),
@@ -415,8 +456,11 @@ def upload():
 @app.route('/api/asistencia')
 @requires_role('asistencia', 'admin')
 def get_asistencia():
+    votacion_id = request.args.get('votacion_id', type=int)
+    if not votacion_id:
+        return jsonify([])
     conn = get_conn()
-    rows = conn.execute('SELECT * FROM asistencia').fetchall()
+    rows = conn.execute('SELECT * FROM asistencia WHERE votacion_id=?', (votacion_id,)).fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
 
@@ -424,12 +468,21 @@ def get_asistencia():
 @app.route('/api/asistencia/resumen')
 @requires_role('asistencia', 'admin', 'votante')
 def asistencia_resumen():
-    """Retorna conteo de acciones por estado y quórum basado en activos."""
-    total, activos, data = resumen_acciones()
+    votacion_id = request.args.get('votacion_id', type=int)
+    if not votacion_id:
+        return jsonify({'error': 'votacion_id requerido'}), 400
+    total, activos, data = resumen_acciones(votacion_id)
+    conn = get_conn()
+    row = conn.execute('SELECT quorum_minimo FROM votaciones WHERE id=?', (votacion_id,)).fetchone()
+    conn.close()
+    quorum_minimo = row['quorum_minimo'] if row else 0
+    quorum_porcentaje = (activos / total * 100) if total else 0
     result = {
         'acciones_totales': total,
         'acciones_activas': activos,
-        'quorum': (activos / total * 100) if total else 0,
+        'quorum_minimo': quorum_minimo,
+        'porcentaje': quorum_porcentaje,
+        'quorum_cumplido': quorum_porcentaje >= quorum_minimo,
         'por_estado': {
             e: {
                 'acciones': data.get(e, 0),
@@ -450,9 +503,12 @@ def update_asistencia(id):
     new_estado = str(data.get('estado', '')).upper()
     if new_estado not in ALLOWED_ESTADOS:
         return jsonify({'error': 'Estado inválido'}), 400
+    votacion_id = request.args.get('votacion_id', type=int)
+    if not votacion_id:
+        return jsonify({'error': 'votacion_id requerido'}), 400
     with db_lock:
         conn = get_conn()
-        cur = conn.execute('UPDATE asistencia SET estado = ? WHERE id = ?', (new_estado, id))
+        cur = conn.execute('UPDATE asistencia SET estado = ? WHERE id = ? AND votacion_id = ?', (new_estado, id, votacion_id))
         conn.commit()
         updated = cur.rowcount
         conn.close()
@@ -474,8 +530,12 @@ def plantilla_asistencia():
 @app.route('/export/<fmt>')
 @requires_role('asistencia', 'admin')
 def export(fmt):
+    votacion_id = request.args.get('votacion_id', type=int)
     conn = get_conn()
-    df = pd.read_sql('SELECT * FROM asistencia', conn)
+    if votacion_id:
+        df = pd.read_sql('SELECT * FROM asistencia WHERE votacion_id=?', conn, params=(votacion_id,))
+    else:
+        df = pd.read_sql('SELECT * FROM asistencia', conn)
     conn.close()
     base = 'asistencia_export'
     if fmt == 'excel':
@@ -517,6 +577,14 @@ def registrar_voto():
         acciones = int(data.get('acciones'))
     except (TypeError, ValueError):
         return jsonify({'error': 'Datos inválidos'}), 400
+    # Verifica quórum antes de permitir votar
+    total, activos, _ = resumen_acciones(votacion_id)
+    conn = get_conn()
+    q_row = conn.execute('SELECT quorum_minimo FROM votaciones WHERE id=?', (votacion_id,)).fetchone()
+    conn.close()
+    quorum_minimo = q_row['quorum_minimo'] if q_row else 0
+    if total == 0 or (activos / total * 100) < quorum_minimo:
+        return jsonify({'error': 'Quórum no alcanzado'}), 403
     with db_lock:
         conn = get_conn()
         conn.execute(
@@ -538,7 +606,7 @@ def registrar_voto():
 @requires_role('votante', 'admin')
 def resultados_votacion(votacion_id):
     """Resumen de resultados por pregunta basados en acciones activas."""
-    total, activos, _ = resumen_acciones()
+    total, activos, _ = resumen_acciones(votacion_id)
     conn = get_conn()
     rows = conn.execute(
         '''SELECT p.id AS pregunta_id, p.texto AS pregunta,

@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const search = document.getElementById('search');
   const filter = document.getElementById('filterEstado');
   const quorumInput = document.getElementById('quorum');
+  const votacionSelect = document.getElementById('votacionSelect');
 
   const uploadInput = document.getElementById('fileInput');
   const uploadBtn = document.getElementById('uploadBtn');
@@ -38,9 +39,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const changed = new Map();
 
   function load() {
-    fetch('/api/asistencia')
+    if (!votacionSelect.value) return;
+    fetch(`/api/asistencia?votacion_id=${votacionSelect.value}`)
       .then(r => r.json())
       .then(data => { rows = data; render(); });
+    fetch(`/api/asistencia/resumen?votacion_id=${votacionSelect.value}`)
+      .then(r => r.json())
+      .then(res => { quorumInput.value = res.quorum_minimo || 0; render(); });
   }
 
   function render() {
@@ -105,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function guardar() {
     if (!changed.size) return;
     const peticiones = Array.from(changed.entries()).map(([id, estado]) =>
-      fetch(`/api/asistencia/${id}`, {
+      fetch(`/api/asistencia/${id}?votacion_id=${votacionSelect.value}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ estado })
@@ -142,9 +147,9 @@ document.addEventListener('DOMContentLoaded', () => {
     render();
   });
 
-  document.getElementById('exportExcel').addEventListener('click', () => window.location = '/export/excel');
-  document.getElementById('exportCsv').addEventListener('click', () => window.location = '/export/csv');
-  document.getElementById('exportPdf').addEventListener('click', () => window.location = '/export/pdf');
+  document.getElementById('exportExcel').addEventListener('click', () => window.location = `/export/excel?votacion_id=${votacionSelect.value}`);
+  document.getElementById('exportCsv').addEventListener('click', () => window.location = `/export/csv?votacion_id=${votacionSelect.value}`);
+  document.getElementById('exportPdf').addEventListener('click', () => window.location = `/export/pdf?votacion_id=${votacionSelect.value}`);
   if (templateBtn) templateBtn.addEventListener('click', () => window.location = '/template/asistencia');
 
   uploadBtn.addEventListener('click', () => {
@@ -152,6 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!file) return alert('Seleccione un archivo');
     const fd = new FormData();
     fd.append('file', file);
+    fd.append('votacion_id', votacionSelect.value);
     fetch('/upload', { method: 'POST', body: fd })
       .then(r => r.json())
       .then(res => {
@@ -167,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('save').addEventListener('click', guardar);
   search.addEventListener('input', render);
   filter.addEventListener('change', render);
-  quorumInput.addEventListener('input', render);
+  if (votacionSelect) votacionSelect.addEventListener('change', load);
 
   // Reloj y auto guardado
   setInterval(() => {

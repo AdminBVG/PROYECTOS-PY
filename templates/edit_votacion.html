@@ -9,9 +9,17 @@
   <form id="votacion-form" action="{{ url_for('admin_update_votacion', votacion_id=data['id']) }}">
     <input type="text" id="nombre_votacion" placeholder="Nombre de votación" required>
     <input type="date" id="fecha">
-    <label>Asignar usuarios</label>
-    <select id="usuarios-select" multiple>
+    <label>Quórum mínimo (%)</label>
+    <input type="number" id="quorum_minimo" min="0" max="100" value="0">
+    <label>Asignar votantes</label>
+    <select id="votantes-select" multiple>
       {% for u in users if u['role'] == 'votante' %}
+        <option value="{{ u['id'] }}">{{ u['username'] }}</option>
+      {% endfor %}
+    </select>
+    <label>Asignar asistentes</label>
+    <select id="asistentes-select" multiple>
+      {% for u in users if u['role'] == 'asistencia' %}
         <option value="{{ u['id'] }}">{{ u['username'] }}</option>
       {% endfor %}
     </select>

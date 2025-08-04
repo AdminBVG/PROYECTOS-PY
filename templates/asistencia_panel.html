@@ -7,13 +7,11 @@
 </header>
 <div class="card">
   <h2>Votaciones asignadas</h2>
-  <ul>
+  <select id="votacionSelect">
     {% for v in votaciones %}
-      <li>{{ v['id'] }} - {{ v['nombre'] }}</li>
-    {% else %}
-      <li>No hay votaciones asignadas</li>
+      <option value="{{ v['id'] }}">{{ v['nombre'] }}</option>
     {% endfor %}
-  </ul>
+  </select>
 </div>
 <div class="card">
   <h2>Control de asistencia</h2>
@@ -33,7 +31,7 @@
       <option value="VIRTUAL">Virtual</option>
       <option value="AUSENTE">Ausente</option>
     </select>
-    <label>Quórum mínimo: <input type="number" id="quorum" value="0"></label>
+    <label>Quórum mínimo: <input type="number" id="quorum" value="0" readonly></label>
   </div>
 
   <div class="actions">
