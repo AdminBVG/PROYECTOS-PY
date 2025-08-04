@@ -113,11 +113,27 @@ def panel_redirect():
 @login_required
 @requires_role('admin')
 def panel_admin():
+    """Panel principal del administrador con secciones de usuarios y votaciones."""
     conn = get_conn()
-    users = conn.execute('SELECT id, username, role FROM users').fetchall()
-    votaciones = conn.execute('SELECT * FROM votaciones').fetchall()
+    users = conn.execute('''
+        SELECT u.id, u.username, u.cedula, u.role,
+               COALESCE(GROUP_CONCAT(v.nombre, ', '), '') AS votaciones
+        FROM users u
+        LEFT JOIN votacion_usuarios vu ON vu.user_id = u.id
+        LEFT JOIN votaciones v ON v.id = vu.votacion_id
+        GROUP BY u.id
+    ''').fetchall()
+    votaciones = conn.execute('''
+        SELECT v.id, v.nombre, v.fecha,
+               COUNT(DISTINCT p.id) AS num_preguntas,
+               COUNT(DISTINCT CASE WHEN vu.rol = 'asistencia' THEN vu.user_id END) AS asistentes
+        FROM votaciones v
+        LEFT JOIN preguntas p ON p.votacion_id = v.id
+        LEFT JOIN votacion_usuarios vu ON vu.votacion_id = v.id
+        GROUP BY v.id
+    ''').fetchall()
     conn.close()
-    return render_template('admin_panel.html', users=users, votaciones=votaciones)
+    return render_template('panel_admin.html', users=users, votaciones=votaciones)
 
 @app.route('/panel_asistencia')
 @login_required
@@ -148,32 +164,78 @@ def panel_votacion():
 @app.route('/admin/create_user', methods=['POST'])
 @requires_role('admin')
 def admin_create_user():
+    """Crea un nuevo usuario con rol y cédula."""
     username = request.form.get('username')
     password = request.form.get('password')
     role = request.form.get('role')
+    cedula = request.form.get('cedula')
     conn = get_conn()
     try:
-        conn.execute('INSERT INTO users (username, password, role) VALUES (?,?,?)',
-                     (username, generate_password_hash(password), role))
+        conn.execute(
+            'INSERT INTO users (username, password, role, cedula) VALUES (?,?,?,?)',
+            (username, generate_password_hash(password), role, cedula)
+        )
         conn.commit()
     except sqlite3.IntegrityError:
-        users = conn.execute('SELECT id, username, role FROM users').fetchall()
-        votaciones = conn.execute('SELECT * FROM votaciones').fetchall()
+        users = conn.execute('''
+            SELECT u.id, u.username, u.cedula, u.role,
+                   COALESCE(GROUP_CONCAT(v.nombre, ', '), '') AS votaciones
+            FROM users u
+            LEFT JOIN votacion_usuarios vu ON vu.user_id = u.id
+            LEFT JOIN votaciones v ON v.id = vu.votacion_id
+            GROUP BY u.id
+        ''').fetchall()
+        votaciones = conn.execute('''
+            SELECT v.id, v.nombre, v.fecha,
+                   COUNT(DISTINCT p.id) AS num_preguntas,
+                   COUNT(DISTINCT CASE WHEN vu.rol = 'asistencia' THEN vu.user_id END) AS asistentes
+            FROM votaciones v
+            LEFT JOIN preguntas p ON p.votacion_id = v.id
+            LEFT JOIN votacion_usuarios vu ON vu.votacion_id = v.id
+            GROUP BY v.id
+        ''').fetchall()
         conn.close()
-        return render_template('admin_panel.html', users=users, votaciones=votaciones,
-                               error='Nombre de usuario ya existe')
+        return render_template('panel_admin.html', users=users, votaciones=votaciones,
+                               error='Usuario o cédula ya existe')
+    conn.close()
+    return redirect(url_for('panel_admin'))
+
+@app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
+@requires_role('admin')
+def admin_delete_user(user_id):
+    """Elimina un usuario por ID."""
+    conn = get_conn()
+    conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
+    conn.execute('DELETE FROM votacion_usuarios WHERE user_id = ?', (user_id,))
+    conn.commit()
     conn.close()
     return redirect(url_for('panel_admin'))
 
 @app.route('/admin/create_votacion', methods=['POST'])
 @requires_role('admin')
 def admin_create_votacion():
+    """Crea una votación con fecha opcional y preguntas."""
     nombre = request.form.get('nombre')
+    fecha = request.form.get('fecha') or None
+    preguntas_raw = request.form.get('preguntas', '')
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute('INSERT INTO votaciones (nombre) VALUES (?)', (nombre,))
+    cur.execute('INSERT INTO votaciones (nombre, fecha) VALUES (?, ?)', (nombre, fecha))
     votacion_id = cur.lastrowid
-    cur.execute('INSERT INTO preguntas (votacion_id, texto) VALUES (?, ?)', (votacion_id, 'Pregunta 1'))
+
+    for line in preguntas_raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if '|' in line:
+            q_text, opciones = line.split('|', 1)
+        else:
+            q_text, opciones = line, ''
+        cur.execute('INSERT INTO preguntas (votacion_id, texto) VALUES (?, ?)', (votacion_id, q_text.strip()))
+        pregunta_id = cur.lastrowid
+        for opt in [o.strip() for o in opciones.split(',') if o.strip()]:
+            cur.execute('INSERT INTO opciones (pregunta_id, texto) VALUES (?, ?)', (pregunta_id, opt))
+
     conn.commit()
     conn.close()
     return redirect(url_for('panel_admin'))

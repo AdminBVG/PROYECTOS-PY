@@ -1,5 +1,4 @@
-// Control avanzado de asistencia
-// Carga datos, permite modificar estados y guardar cambios
+// Control avanzado de asistencia con importación y gráficos en tiempo real
 
 document.addEventListener('DOMContentLoaded', () => {
   const socket = io();
@@ -7,6 +6,27 @@ document.addEventListener('DOMContentLoaded', () => {
   const summary = document.getElementById('summary');
   const search = document.getElementById('search');
   const filter = document.getElementById('filterEstado');
+  const quorumInput = document.getElementById('quorum');
+
+  const uploadInput = document.getElementById('fileInput');
+  const uploadBtn = document.getElementById('uploadBtn');
+
+  const pieChart = new Chart(document.getElementById('pieChart').getContext('2d'), {
+    type: 'pie',
+    data: {
+      labels: ['Presencial', 'Virtual', 'Ausente'],
+      datasets: [{ data: [0, 0, 0], backgroundColor: ['#4CAF50', '#2196F3', '#f44336'] }]
+    }
+  });
+
+  const barChart = new Chart(document.getElementById('barChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: ['Presencial', 'Virtual', 'Ausente'],
+      datasets: [{ label: 'Acciones', data: [0, 0, 0], backgroundColor: ['#4CAF50', '#2196F3', '#f44336'] }]
+    },
+    options: { scales: { y: { beginAtZero: true } } }
+  });
 
   let rows = [];
   const changed = new Map();
@@ -14,15 +34,13 @@ document.addEventListener('DOMContentLoaded', () => {
   function load() {
     fetch('/api/asistencia')
       .then(r => r.json())
-      .then(data => {
-        rows = data;
-        render();
-      });
+      .then(data => { rows = data; render(); });
   }
 
   function render() {
     tbody.innerHTML = '';
-    const counts = {PRESENCIAL:0, AUSENTE:0, VIRTUAL:0};
+    const counts = { PRESENCIAL: 0, VIRTUAL: 0, AUSENTE: 0 };
+    const acciones = { PRESENCIAL: 0, VIRTUAL: 0, AUSENTE: 0 };
     rows.forEach(r => {
       if (filter.value && r.estado !== filter.value) return;
       const cadena = `${r.accionista || ''} ${r.representante || ''} ${r.apoderado || ''}`.toLowerCase();
@@ -34,24 +52,36 @@ document.addEventListener('DOMContentLoaded', () => {
         <td>${r.accionista || ''}</td>
         <td>${r.representante || ''}</td>
         <td>${r.apoderado || ''}</td>
+        <td>${r.acciones || 0}</td>
         <td>
           <select class="estado">
             <option value="PRESENCIAL" ${currentEstado === 'PRESENCIAL' ? 'selected' : ''}>Presente</option>
-            <option value="AUSENTE" ${currentEstado === 'AUSENTE' ? 'selected' : ''}>Ausente</option>
             <option value="VIRTUAL" ${currentEstado === 'VIRTUAL' ? 'selected' : ''}>Virtual</option>
+            <option value="AUSENTE" ${currentEstado === 'AUSENTE' ? 'selected' : ''}>Ausente</option>
           </select>
         </td>`;
       const select = tr.querySelector('select');
       select.addEventListener('change', () => {
         changed.set(r.id, select.value);
+        render();
       });
       tbody.appendChild(tr);
       counts[currentEstado] = (counts[currentEstado] || 0) + 1;
+      acciones[currentEstado] = (acciones[currentEstado] || 0) + (r.acciones || 0);
     });
-    summary.textContent = `${counts.PRESENCIAL || 0} presentes / ${counts.AUSENTE || 0} ausentes / ${counts.VIRTUAL || 0} virtual`;
+    summary.textContent = `${counts.PRESENCIAL} presenciales / ${counts.VIRTUAL} virtuales / ${counts.AUSENTE} ausentes`;
+
+    pieChart.data.datasets[0].data = [counts.PRESENCIAL, counts.VIRTUAL, counts.AUSENTE];
+    pieChart.update();
+    barChart.data.datasets[0].data = [acciones.PRESENCIAL, acciones.VIRTUAL, acciones.AUSENTE];
+    barChart.update();
+
+    const totalPresentes = counts.PRESENCIAL + counts.VIRTUAL;
+    const quorum = parseInt(quorumInput.value || '0', 10);
+    quorumInput.style.borderColor = totalPresentes >= quorum ? 'green' : 'red';
   }
 
-  socket.on('estado_changed', ({id, estado}) => {
+  socket.on('estado_changed', ({ id, estado }) => {
     const row = tbody.querySelector(`tr[data-id="${id}"]`);
     const record = rows.find(r => r.id === id);
     if (record) record.estado = estado;
@@ -67,8 +97,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const peticiones = Array.from(changed.entries()).map(([id, estado]) =>
       fetch(`/api/asistencia/${id}`, {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({estado})
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estado })
       })
     );
     try {
@@ -85,16 +115,47 @@ document.addEventListener('DOMContentLoaded', () => {
       s.value = 'PRESENCIAL';
       changed.set(s.closest('tr').dataset.id, s.value);
     });
+    render();
+  });
+  document.getElementById('markVirtual').addEventListener('click', () => {
+    tbody.querySelectorAll('select.estado').forEach(s => {
+      s.value = 'VIRTUAL';
+      changed.set(s.closest('tr').dataset.id, s.value);
+    });
+    render();
   });
   document.getElementById('clearAll').addEventListener('click', () => {
     tbody.querySelectorAll('select.estado').forEach(s => {
       s.value = 'AUSENTE';
       changed.set(s.closest('tr').dataset.id, s.value);
     });
+    render();
   });
+
+  document.getElementById('exportExcel').addEventListener('click', () => window.location = '/export/excel');
+  document.getElementById('exportCsv').addEventListener('click', () => window.location = '/export/csv');
+  document.getElementById('exportPdf').addEventListener('click', () => window.location = '/export/pdf');
+
+  uploadBtn.addEventListener('click', () => {
+    const file = uploadInput.files[0];
+    if (!file) return alert('Seleccione un archivo');
+    const fd = new FormData();
+    fd.append('file', file);
+    fetch('/upload', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(res => {
+        if (res.ok) {
+          load();
+        } else {
+          alert(res.error || 'Error al importar');
+        }
+      });
+  });
+
   document.getElementById('save').addEventListener('click', guardar);
   search.addEventListener('input', render);
   filter.addEventListener('change', render);
+  quorumInput.addEventListener('input', render);
 
   // Reloj y auto guardado
   setInterval(() => {

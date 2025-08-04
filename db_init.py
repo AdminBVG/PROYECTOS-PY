@@ -23,17 +23,30 @@ CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
+    cedula TEXT UNIQUE,
     role TEXT CHECK(role IN ('admin','asistencia','votante')) NOT NULL
 )
 ''')
+
+# Asegura columnas opcionales en instalaciones existentes
+try:
+    c.execute("ALTER TABLE users ADD COLUMN cedula TEXT UNIQUE")
+except sqlite3.OperationalError:
+    pass
 
 # Votaciones
 c.execute('''
 CREATE TABLE IF NOT EXISTS votaciones (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nombre TEXT NOT NULL
+    nombre TEXT NOT NULL,
+    fecha TEXT
 )
 ''')
+
+try:
+    c.execute("ALTER TABLE votaciones ADD COLUMN fecha TEXT")
+except sqlite3.OperationalError:
+    pass
 
 # Preguntas
 c.execute('''
@@ -42,6 +55,16 @@ CREATE TABLE IF NOT EXISTS preguntas (
     votacion_id INTEGER NOT NULL,
     texto TEXT NOT NULL,
     FOREIGN KEY(votacion_id) REFERENCES votaciones(id)
+)
+''')
+
+# Opciones por pregunta
+c.execute('''
+CREATE TABLE IF NOT EXISTS opciones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pregunta_id INTEGER NOT NULL,
+    texto TEXT NOT NULL,
+    FOREIGN KEY(pregunta_id) REFERENCES preguntas(id)
 )
 ''')
 
