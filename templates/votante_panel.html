@@ -9,7 +9,13 @@
   <h2>Votaciones disponibles</h2>
   <ul>
     {% for v in votaciones %}
-      <li>{{ v['id'] }} - {{ v['nombre'] }}</li>
+      <li>
+        {{ v['id'] }} - {{ v['nombre'] }}
+        <button {% if not v['quorum_ok'] %}disabled{% endif %}>Iniciar votación</button>
+        {% if not v['quorum_ok'] %}
+          <small>Quórum {{ v['porcentaje']|round(1) }}% / mínimo {{ v['quorum_minimo'] }}</small>
+        {% endif %}
+      </li>
     {% else %}
       <li>No hay votaciones asignadas</li>
     {% endfor %}

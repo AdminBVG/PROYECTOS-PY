@@ -66,9 +66,17 @@
     <form id="votacion-form" action="{{ url_for('admin_create_votacion') }}">
       <input type="text" id="nombre_votacion" placeholder="Nombre de votación" required>
       <input type="date" id="fecha">
-      <label>Asignar usuarios</label>
-      <select id="usuarios-select" multiple>
+      <label>Quórum mínimo (%)</label>
+      <input type="number" id="quorum_minimo" min="0" max="100" value="0">
+      <label>Asignar votantes</label>
+      <select id="votantes-select" multiple>
         {% for u in users if u['role'] == 'votante' %}
+          <option value="{{ u['id'] }}">{{ u['username'] }}</option>
+        {% endfor %}
+      </select>
+      <label>Asignar asistentes</label>
+      <select id="asistentes-select" multiple>
+        {% for u in users if u['role'] == 'asistencia' %}
           <option value="{{ u['id'] }}">{{ u['username'] }}</option>
         {% endfor %}
       </select>
@@ -86,7 +94,9 @@
           <th>Nombre</th>
           <th>Fecha</th>
           <th># Preguntas</th>
-          <th>Asistentes asignados</th>
+          <th>Asistentes</th>
+          <th>Votantes</th>
+          <th>Quórum mínimo</th>
           <th>Acciones</th>
         </tr>
       </thead>
@@ -96,7 +106,9 @@
           <td>{{ v['nombre'] }}</td>
           <td>{{ v['fecha'] or '' }}</td>
           <td>{{ v['num_preguntas'] }}</td>
-          <td>{{ v['asistentes'] }}</td>
+          <td>{{ v['asistentes'] }}{% if v['asistentes_nombres'] %}<br><small>{{ v['asistentes_nombres'] }}</small>{% endif %}</td>
+          <td>{{ v['votantes'] }}{% if v['votantes_nombres'] %}<br><small>{{ v['votantes_nombres'] }}</small>{% endif %}</td>
+          <td>{{ v['quorum_minimo'] }}</td>
           <td>
             <a href="{{ url_for('admin_edit_votacion', votacion_id=v['id']) }}">Editar</a>
             <form method="post" action="{{ url_for('admin_delete_votacion', votacion_id=v['id']) }}" style="display:inline" onsubmit="return confirm('¿Eliminar votación?');">

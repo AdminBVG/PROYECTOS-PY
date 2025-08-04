@@ -4,19 +4,6 @@ from werkzeug.security import generate_password_hash
 # Crea o abre la base
 conn = sqlite3.connect('db.sqlite')
 c = conn.cursor()
-
-# Tabla de asistencia
-c.execute('''
-CREATE TABLE IF NOT EXISTS asistencia (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    accionista TEXT,
-    representante TEXT,
-    apoderado TEXT,
-    acciones INTEGER,
-    estado TEXT CHECK(estado IN ('PRESENCIAL','VIRTUAL','AUSENTE')) NOT NULL DEFAULT 'AUSENTE'
-)
-''')
-
 # Usuarios
 c.execute('''
 CREATE TABLE IF NOT EXISTS users (
@@ -46,14 +33,34 @@ c.execute('''
 CREATE TABLE IF NOT EXISTS votaciones (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL,
-    fecha TEXT
+    fecha TEXT,
+    quorum_minimo REAL DEFAULT 0
 )
 ''')
 
-try:
-    c.execute("ALTER TABLE votaciones ADD COLUMN fecha TEXT")
-except sqlite3.OperationalError:
-    pass
+# Asegura columnas opcionales
+for col, definition in (
+    ('fecha', "ALTER TABLE votaciones ADD COLUMN fecha TEXT"),
+    ('quorum_minimo', "ALTER TABLE votaciones ADD COLUMN quorum_minimo REAL DEFAULT 0"),
+):
+    try:
+        c.execute(definition)
+    except sqlite3.OperationalError:
+        pass
+
+# Tabla de asistencia (por votación)
+c.execute('''
+CREATE TABLE IF NOT EXISTS asistencia (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    votacion_id INTEGER NOT NULL,
+    accionista TEXT,
+    representante TEXT,
+    apoderado TEXT,
+    acciones INTEGER,
+    estado TEXT CHECK(estado IN ('PRESENCIAL','VIRTUAL','AUSENTE')) NOT NULL DEFAULT 'AUSENTE',
+    FOREIGN KEY(votacion_id) REFERENCES votaciones(id)
+)
+''')
 
 # Preguntas
 c.execute('''
