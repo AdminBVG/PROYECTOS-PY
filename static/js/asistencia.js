@@ -2,6 +2,7 @@
 // Carga datos, permite modificar estados y guardar cambios
 
 document.addEventListener('DOMContentLoaded', () => {
+  const socket = io();
   const tbody = document.querySelector('#tablaAsistencia tbody');
   const summary = document.getElementById('summary');
   const search = document.getElementById('search');
@@ -49,6 +50,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     summary.textContent = `${counts.PRESENCIAL || 0} presentes / ${counts.AUSENTE || 0} ausentes / ${counts.VIRTUAL || 0} virtual`;
   }
+
+  socket.on('estado_changed', ({id, estado}) => {
+    const row = tbody.querySelector(`tr[data-id="${id}"]`);
+    const record = rows.find(r => r.id === id);
+    if (record) record.estado = estado;
+    if (row) {
+      const select = row.querySelector('select.estado');
+      if (select) select.value = estado;
+    }
+    render();
+  });
 
   async function guardar() {
     if (!changed.size) return;

@@ -123,9 +123,16 @@ class VotacionApp:
         self.input_path = path
         self.df_original = df.copy()
         cols = list(df.columns)
-        self.NO_COL = next(c for c in cols if str(c).strip().upper().startswith("NO"))
-        self.ATT_COL = next(c for c in cols if "ASISTENCIA" in c.upper())
-        self.ACTIONS_COL = next(c for c in cols if "ACCION" in c.upper())
+        try:
+            self.NO_COL = next(c for c in cols if str(c).strip().upper().startswith("NO"))
+            self.ATT_COL = next(c for c in cols if "ASISTENCIA" in c.upper())
+            self.ACTIONS_COL = next(c for c in cols if "ACCION" in c.upper())
+        except StopIteration:
+            messagebox.showerror(
+                "Columnas faltantes",
+                "El archivo debe contener columnas de número, asistencia y acciones"
+            )
+            return
         self.df_original[self.ATT_COL] = self.df_original[self.ATT_COL].astype(object)
         self.tree["columns"] = cols
         for c in cols:
