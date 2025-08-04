@@ -29,10 +29,17 @@ CREATE TABLE IF NOT EXISTS users (
 ''')
 
 # Asegura columnas opcionales en instalaciones existentes
-try:
-    c.execute("ALTER TABLE users ADD COLUMN cedula TEXT UNIQUE")
-except sqlite3.OperationalError:
-    pass
+# Verifica si la columna 'cedula' existe y la agrega si falta
+existing_cols = [row[1] for row in c.execute("PRAGMA table_info(users)").fetchall()]
+if 'cedula' not in existing_cols:
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN cedula TEXT UNIQUE")
+        print("✅ Columna 'cedula' añadida a la tabla users")
+    except sqlite3.OperationalError as exc:
+        print(f"❌ No se pudo crear la columna 'cedula': {exc}")
+        print("Ejecute manualmente: ALTER TABLE users ADD COLUMN cedula TEXT UNIQUE")
+        conn.close()
+        raise SystemExit(1)
 
 # Votaciones
 c.execute('''
