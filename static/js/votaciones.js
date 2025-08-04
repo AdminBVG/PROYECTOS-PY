@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function createPregunta() {
+  function createPregunta(data = null) {
     const preguntaDiv = document.createElement('div');
     preguntaDiv.className = 'pregunta';
 
@@ -59,6 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
     inputPregunta.type = 'text';
     inputPregunta.placeholder = 'Texto de la pregunta';
     inputPregunta.className = 'pregunta-texto';
+    if (data && data.texto) inputPregunta.value = data.texto;
     preguntaDiv.appendChild(inputPregunta);
 
     const opcionesDiv = document.createElement('div');
@@ -72,9 +73,27 @@ document.addEventListener('DOMContentLoaded', () => {
     addOpcionBtn.addEventListener('click', () => addOpcion(opcionesDiv));
     preguntaDiv.appendChild(addOpcionBtn);
 
-    // add two default options
-    addOpcion(opcionesDiv);
-    addOpcion(opcionesDiv);
+    if (data && Array.isArray(data.opciones) && data.opciones.length) {
+      data.opciones.forEach(opt => {
+        const opcionDiv = document.createElement('div');
+        opcionDiv.className = 'opcion';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = 'Opción';
+        input.value = opt;
+        opcionDiv.appendChild(input);
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.textContent = '🗑️';
+        removeBtn.className = 'remove-opcion';
+        removeBtn.addEventListener('click', () => opcionDiv.remove());
+        opcionDiv.appendChild(removeBtn);
+        opcionesDiv.appendChild(opcionDiv);
+      });
+    } else {
+      addOpcion(opcionesDiv);
+      addOpcion(opcionesDiv);
+    }
 
     preguntasContainer.appendChild(preguntaDiv);
     updatePreguntaLabels();
@@ -86,13 +105,15 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     const nombre = document.getElementById('nombre_votacion').value;
     const fecha = document.getElementById('fecha').value;
+    const usuariosSelect = document.getElementById('usuarios-select');
     const preguntas = Array.from(preguntasContainer.children).map(p => {
       const texto = p.querySelector('.pregunta-texto').value;
       const opciones = Array.from(p.querySelectorAll('.opcion input')).map(i => i.value).filter(v => v);
       return { texto, opciones };
     }).filter(p => p.texto);
 
-    const data = { nombre_votacion: nombre, fecha, preguntas };
+    const usuarios = usuariosSelect ? Array.from(usuariosSelect.selectedOptions).map(o => o.value) : [];
+    const data = { nombre_votacion: nombre, fecha, preguntas, usuarios };
 
     const resp = await fetch(form.action, {
       method: 'POST',
@@ -101,12 +122,30 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (resp.ok) {
-      window.location.reload();
+      window.location.href = '/panel_admin';
     } else {
       alert('Error al guardar');
     }
   });
 
-  // start with one question
-  createPregunta();
+  function loadInitial() {
+    if (!window.initialData) {
+      createPregunta();
+      return;
+    }
+    document.getElementById('nombre_votacion').value = window.initialData.nombre || '';
+    if (window.initialData.fecha) document.getElementById('fecha').value = window.initialData.fecha;
+    preguntasContainer.innerHTML = '';
+    (window.initialData.preguntas || []).forEach(p => createPregunta(p));
+    const sel = document.getElementById('usuarios-select');
+    if (sel) {
+      Array.from(sel.options).forEach(o => {
+        if ((window.initialData.usuarios || []).includes(parseInt(o.value))) {
+          o.selected = true;
+        }
+      });
+    }
+  }
+
+  loadInitial();
 });

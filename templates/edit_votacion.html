@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Editar votación{% endblock %}
+{% block content %}
+<header class="header">
+  <h1>Editar votación</h1>
+  <a class="logout" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</a>
+</header>
+<div class="card">
+  <form id="votacion-form" action="{{ url_for('admin_update_votacion', votacion_id=data['id']) }}">
+    <input type="text" id="nombre_votacion" placeholder="Nombre de votación" required>
+    <input type="date" id="fecha">
+    <label>Asignar usuarios</label>
+    <select id="usuarios-select" multiple>
+      {% for u in users if u['role'] == 'votante' %}
+        <option value="{{ u['id'] }}">{{ u['username'] }}</option>
+      {% endfor %}
+    </select>
+    <div id="preguntas-container"></div>
+    <button type="button" id="add-pregunta">+ Añadir pregunta</button>
+    <button type="submit">Guardar</button>
+  </form>
+</div>
+<script>
+  window.initialData = {{ data | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/votaciones.js') }}"></script>
+{% endblock %}

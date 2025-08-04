@@ -3,6 +3,7 @@ import sqlite3
 import threading
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for, g
+from io import BytesIO
 from flask_socketio import SocketIO
 import pandas as pd
 from werkzeug.utils import secure_filename
@@ -220,6 +221,7 @@ def admin_create_votacion():
         nombre = data.get('nombre_votacion')
         fecha = data.get('fecha') or None
         preguntas = data.get('preguntas', [])
+        usuarios = [int(u) for u in data.get('usuarios', [])]
         conn = get_conn()
         cur = conn.cursor()
         cur.execute('INSERT INTO votaciones (nombre, fecha) VALUES (?, ?)', (nombre, fecha))
@@ -234,6 +236,11 @@ def admin_create_votacion():
                 opt = opt.strip()
                 if opt:
                     cur.execute('INSERT INTO opciones (pregunta_id, texto) VALUES (?, ?)', (pregunta_id, opt))
+        for uid in usuarios:
+            try:
+                cur.execute('INSERT INTO votacion_usuarios (votacion_id, user_id, rol) VALUES (?,?,?)', (votacion_id, uid, 'votante'))
+            except sqlite3.IntegrityError:
+                pass
         conn.commit()
         conn.close()
         return jsonify({'status': 'ok'})
@@ -261,6 +268,69 @@ def admin_create_votacion():
     conn.close()
     return redirect(url_for('panel_admin'))
 
+@app.route('/admin/votacion/<int:votacion_id>/delete', methods=['POST'])
+@requires_role('admin')
+def admin_delete_votacion(votacion_id):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute('DELETE FROM votacion_usuarios WHERE votacion_id=?', (votacion_id,))
+    cur.execute('DELETE FROM opciones WHERE pregunta_id IN (SELECT id FROM preguntas WHERE votacion_id=?)', (votacion_id,))
+    cur.execute('DELETE FROM preguntas WHERE votacion_id=?', (votacion_id,))
+    cur.execute('DELETE FROM votaciones WHERE id=?', (votacion_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('panel_admin'))
+
+@app.route('/admin/votacion/<int:votacion_id>/edit')
+@requires_role('admin')
+def admin_edit_votacion(votacion_id):
+    conn = get_conn()
+    votacion = conn.execute('SELECT * FROM votaciones WHERE id=?', (votacion_id,)).fetchone()
+    if not votacion:
+        conn.close()
+        return redirect(url_for('panel_admin'))
+    preguntas = []
+    for p in conn.execute('SELECT * FROM preguntas WHERE votacion_id=?', (votacion_id,)).fetchall():
+        opts = conn.execute('SELECT texto FROM opciones WHERE pregunta_id=?', (p['id'],)).fetchall()
+        preguntas.append({'texto': p['texto'], 'opciones': [o['texto'] for o in opts]})
+    asignados = [r['user_id'] for r in conn.execute('SELECT user_id FROM votacion_usuarios WHERE votacion_id=?', (votacion_id,)).fetchall()]
+    users = conn.execute('SELECT id, username, role FROM users').fetchall()
+    conn.close()
+    data = {'id': votacion['id'], 'nombre': votacion['nombre'], 'fecha': votacion['fecha'], 'preguntas': preguntas, 'usuarios': asignados}
+    return render_template('edit_votacion.html', data=data, users=users)
+
+@app.route('/admin/votacion/<int:votacion_id>/update', methods=['POST'])
+@requires_role('admin')
+def admin_update_votacion(votacion_id):
+    data = request.get_json(silent=True) or {}
+    nombre = data.get('nombre_votacion')
+    fecha = data.get('fecha') or None
+    preguntas = data.get('preguntas', [])
+    usuarios = [int(u) for u in data.get('usuarios', [])]
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute('UPDATE votaciones SET nombre=?, fecha=? WHERE id=?', (nombre, fecha, votacion_id))
+    cur.execute('DELETE FROM opciones WHERE pregunta_id IN (SELECT id FROM preguntas WHERE votacion_id=?)', (votacion_id,))
+    cur.execute('DELETE FROM preguntas WHERE votacion_id=?', (votacion_id,))
+    for p in preguntas:
+        texto = p.get('texto', '').strip()
+        if not texto:
+            continue
+        cur.execute('INSERT INTO preguntas (votacion_id, texto) VALUES (?, ?)', (votacion_id, texto))
+        pregunta_id = cur.lastrowid
+        for opt in p.get('opciones', []):
+            opt = opt.strip()
+            if opt:
+                cur.execute('INSERT INTO opciones (pregunta_id, texto) VALUES (?, ?)', (pregunta_id, opt))
+    cur.execute('DELETE FROM votacion_usuarios WHERE votacion_id=?', (votacion_id,))
+    for uid in usuarios:
+        try:
+            cur.execute('INSERT INTO votacion_usuarios (votacion_id, user_id, rol) VALUES (?,?,?)', (votacion_id, uid, 'votante'))
+        except sqlite3.IntegrityError:
+            pass
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'ok'})
 @app.route('/admin/asignar', methods=['POST'])
 @requires_role('admin')
 def admin_asignar():
@@ -353,6 +423,16 @@ def update_asistencia(id):
         socketio.emit('estado_changed', {'id': id, 'estado': new_estado})
         return ('', 204)
     return jsonify({'error': 'Registro no encontrado'}), 404
+
+@app.route('/template/asistencia')
+@requires_role('asistencia', 'admin')
+def plantilla_asistencia():
+    """Genera una plantilla vacía de asistencia en formato Excel."""
+    df = pd.DataFrame(columns=['id', 'accionista', 'representante', 'apoderado', 'acciones', 'estado'])
+    output = BytesIO()
+    df.to_excel(output, index=False)
+    output.seek(0)
+    return send_file(output, as_attachment=True, download_name='plantilla_asistencia.xlsx')
 
 @app.route('/export/<fmt>')
 @requires_role('asistencia', 'admin')
