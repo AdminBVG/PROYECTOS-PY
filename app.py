@@ -487,13 +487,13 @@ def export(fmt):
     elif fmt == 'pdf' and HAS_MPL:
         fname = f"{base}.pdf"
         with PdfPages(fname) as pdf:
-            fig, ax = plt.subplots()
+            fig, ax = plt.subplots(figsize=(4, 4))
             df['estado'].value_counts().plot.pie(ax=ax, autopct='%1.1f%%')
             ax.set_ylabel('')
             pdf.savefig(fig)
             plt.close(fig)
 
-            fig2, ax2 = plt.subplots()
+            fig2, ax2 = plt.subplots(figsize=(5, 3))
             df.groupby('estado')['acciones'].sum().plot.bar(ax=ax2)
             ax2.set_ylabel('Total Acciones')
             pdf.savefig(fig2)

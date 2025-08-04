@@ -60,10 +60,12 @@
   </table>
 
   <div id="summary"></div>
-  <canvas id="pieChart"></canvas>
-  <canvas id="barChart"></canvas>
+  <div class="charts">
+    <canvas id="pieChart" width="300" height="300"></canvas>
+    <canvas id="barChart" width="300" height="300"></canvas>
+  </div>
 </div>
-<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='js/asistencia.js') }}"></script>
 {% endblock %}

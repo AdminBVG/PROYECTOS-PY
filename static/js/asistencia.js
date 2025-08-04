@@ -17,7 +17,8 @@ document.addEventListener('DOMContentLoaded', () => {
     data: {
       labels: ['Presencial', 'Virtual', 'Ausente'],
       datasets: [{ data: [0, 0, 0], backgroundColor: ['#4CAF50', '#2196F3', '#f44336'] }]
-    }
+    },
+    options: { responsive: true, maintainAspectRatio: false }
   });
 
   const barChart = new Chart(document.getElementById('barChart').getContext('2d'), {
@@ -26,7 +27,11 @@ document.addEventListener('DOMContentLoaded', () => {
       labels: ['Presencial', 'Virtual', 'Ausente'],
       datasets: [{ label: 'Acciones', data: [0, 0, 0], backgroundColor: ['#4CAF50', '#2196F3', '#f44336'] }]
     },
-    options: { scales: { y: { beginAtZero: true } } }
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true } }
+    }
   });
 
   let rows = [];
