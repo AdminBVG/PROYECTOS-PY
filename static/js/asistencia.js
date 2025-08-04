@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const uploadInput = document.getElementById('fileInput');
   const uploadBtn = document.getElementById('uploadBtn');
+  const templateBtn = document.getElementById('templateBtn');
 
   const pieChart = new Chart(document.getElementById('pieChart').getContext('2d'), {
     type: 'pie',
@@ -135,6 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('exportExcel').addEventListener('click', () => window.location = '/export/excel');
   document.getElementById('exportCsv').addEventListener('click', () => window.location = '/export/csv');
   document.getElementById('exportPdf').addEventListener('click', () => window.location = '/export/pdf');
+  if (templateBtn) templateBtn.addEventListener('click', () => window.location = '/template/asistencia');
 
   uploadBtn.addEventListener('click', () => {
     const file = uploadInput.files[0];
@@ -145,6 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
       .then(r => r.json())
       .then(res => {
         if (res.ok) {
+          alert('Importación exitosa');
           load();
         } else {
           alert(res.error || 'Error al importar');

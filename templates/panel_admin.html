@@ -58,21 +58,6 @@
     </table>
   </div>
 
-  <div class="card">
-    <h2>Asignar usuario a votación</h2>
-    <form method="post" action="{{ url_for('admin_asignar') }}">
-      <label>Usuario</label>
-      <input type="number" name="user_id" placeholder="ID Usuario" required>
-      <label>Votación</label>
-      <input type="number" name="votacion_id" placeholder="ID Votación" required>
-      <label>Rol</label>
-      <select name="rol">
-        <option value="asistencia">asistencia</option>
-        <option value="votante">votante</option>
-      </select>
-      <button type="submit">Asignar</button>
-    </form>
-  </div>
 </section>
 
 <section id="votaciones" class="tab-section hidden">
@@ -81,6 +66,12 @@
     <form id="votacion-form" action="{{ url_for('admin_create_votacion') }}">
       <input type="text" id="nombre_votacion" placeholder="Nombre de votación" required>
       <input type="date" id="fecha">
+      <label>Asignar usuarios</label>
+      <select id="usuarios-select" multiple>
+        {% for u in users if u['role'] == 'votante' %}
+          <option value="{{ u['id'] }}">{{ u['username'] }}</option>
+        {% endfor %}
+      </select>
       <div id="preguntas-container"></div>
       <button type="button" id="add-pregunta">+ Añadir pregunta</button>
       <button type="submit">Guardar</button>
@@ -96,6 +87,7 @@
           <th>Fecha</th>
           <th># Preguntas</th>
           <th>Asistentes asignados</th>
+          <th>Acciones</th>
         </tr>
       </thead>
       <tbody>
@@ -105,6 +97,12 @@
           <td>{{ v['fecha'] or '' }}</td>
           <td>{{ v['num_preguntas'] }}</td>
           <td>{{ v['asistentes'] }}</td>
+          <td>
+            <a href="{{ url_for('admin_edit_votacion', votacion_id=v['id']) }}">Editar</a>
+            <form method="post" action="{{ url_for('admin_delete_votacion', votacion_id=v['id']) }}" style="display:inline" onsubmit="return confirm('¿Eliminar votación?');">
+              <button type="submit">Eliminar</button>
+            </form>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
