@@ -17,11 +17,13 @@
   <h2>Control de asistencia</h2>
   <div id="clock"></div>
 
+  {% if not readonly %}
   <div class="import">
     <input type="file" id="fileInput" accept=".xlsx,.xls">
     <button id="uploadBtn">Importar</button>
-    <button id="templateBtn">Descargar plantilla Excel</button>
   </div>
+  {% endif %}
+  <button id="templateBtn">Exportar plantilla de asistencia</button>
 
   <div class="filters">
     <input id="search" placeholder="Buscar por nombre">
@@ -35,10 +37,12 @@
   </div>
 
   <div class="actions">
+    {% if not readonly %}
     <button id="markAll">PRESENCIAL</button>
     <button id="markVirtual">VIRTUAL</button>
     <button id="clearAll">AUSENTE</button>
     <button id="save">Guardar</button>
+    {% endif %}
     <button id="exportExcel">Exportar Excel</button>
     <button id="exportCsv">Exportar CSV</button>
     <button id="exportPdf">Exportar PDF</button>
@@ -64,6 +68,9 @@
 
   <div id="summary"></div>
 </div>
+<script>
+  const READONLY = {{ 'true' if readonly else 'false' }};
+</script>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='js/asistencia.js') }}"></script>

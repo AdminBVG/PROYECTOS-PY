@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Registro de Votos{% endblock %}
+{% block content %}
+<header class="header">
+  <h1>Registro de Votos - {{ votacion.nombre }}</h1>
+  <a class="logout" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</a>
+</header>
+<div id="votacionApp" data-votacion="{{ votacion.id }}"></div>
+<script src="{{ url_for('static', filename='js/votacion.js') }}"></script>
+{% endblock %}

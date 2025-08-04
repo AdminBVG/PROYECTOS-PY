@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const uploadInput = document.getElementById('fileInput');
   const uploadBtn = document.getElementById('uploadBtn');
   const templateBtn = document.getElementById('templateBtn');
+  const READONLY = window.READONLY || false;
 
   const pieChart = new Chart(document.getElementById('pieChart').getContext('2d'), {
     type: 'pie',
@@ -72,10 +73,12 @@ document.addEventListener('DOMContentLoaded', () => {
           </select>
         </td>`;
       const select = tr.querySelector('select');
-      select.addEventListener('change', () => {
-        changed.set(r.id, select.value);
-        render();
-      });
+      if (READONLY) select.disabled = true; else {
+        select.addEventListener('change', () => {
+          changed.set(r.id, select.value);
+          render();
+        });
+      }
       tbody.appendChild(tr);
       counts[currentEstado] = (counts[currentEstado] || 0) + 1;
       acciones[currentEstado] = (acciones[currentEstado] || 0) + (r.acciones || 0);
@@ -125,34 +128,36 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  document.getElementById('markAll').addEventListener('click', () => {
-    tbody.querySelectorAll('select.estado').forEach(s => {
-      s.value = 'PRESENCIAL';
-      changed.set(s.closest('tr').dataset.id, s.value);
+  if (!READONLY) {
+    document.getElementById('markAll').addEventListener('click', () => {
+      tbody.querySelectorAll('select.estado').forEach(s => {
+        s.value = 'PRESENCIAL';
+        changed.set(s.closest('tr').dataset.id, s.value);
+      });
+      render();
     });
-    render();
-  });
-  document.getElementById('markVirtual').addEventListener('click', () => {
-    tbody.querySelectorAll('select.estado').forEach(s => {
-      s.value = 'VIRTUAL';
-      changed.set(s.closest('tr').dataset.id, s.value);
+    document.getElementById('markVirtual').addEventListener('click', () => {
+      tbody.querySelectorAll('select.estado').forEach(s => {
+        s.value = 'VIRTUAL';
+        changed.set(s.closest('tr').dataset.id, s.value);
+      });
+      render();
     });
-    render();
-  });
-  document.getElementById('clearAll').addEventListener('click', () => {
-    tbody.querySelectorAll('select.estado').forEach(s => {
-      s.value = 'AUSENTE';
-      changed.set(s.closest('tr').dataset.id, s.value);
+    document.getElementById('clearAll').addEventListener('click', () => {
+      tbody.querySelectorAll('select.estado').forEach(s => {
+        s.value = 'AUSENTE';
+        changed.set(s.closest('tr').dataset.id, s.value);
+      });
+      render();
     });
-    render();
-  });
+  }
 
   document.getElementById('exportExcel').addEventListener('click', () => window.location = `/export/excel?votacion_id=${votacionSelect.value}`);
   document.getElementById('exportCsv').addEventListener('click', () => window.location = `/export/csv?votacion_id=${votacionSelect.value}`);
   document.getElementById('exportPdf').addEventListener('click', () => window.location = `/export/pdf?votacion_id=${votacionSelect.value}`);
   if (templateBtn) templateBtn.addEventListener('click', () => window.location = '/template/asistencia');
 
-  uploadBtn.addEventListener('click', () => {
+  if (uploadBtn) uploadBtn.addEventListener('click', () => {
     const file = uploadInput.files[0];
     if (!file) return alert('Seleccione un archivo');
     const fd = new FormData();
@@ -170,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
   });
 
-  document.getElementById('save').addEventListener('click', guardar);
+  if (!READONLY) document.getElementById('save').addEventListener('click', guardar);
   search.addEventListener('input', render);
   filter.addEventListener('change', render);
   if (votacionSelect) votacionSelect.addEventListener('change', load);
@@ -179,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(() => {
     document.getElementById('clock').textContent = new Date().toLocaleTimeString();
   }, 1000);
-  setInterval(() => {
+  if (!READONLY) setInterval(() => {
     if (changed.size) guardar();
   }, 30000);
 
