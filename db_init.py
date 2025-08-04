@@ -87,6 +87,23 @@ CREATE TABLE IF NOT EXISTS votacion_usuarios (
 )
 ''')
 
+# Registro de votos por pregunta/opción
+c.execute('''
+CREATE TABLE IF NOT EXISTS votos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    votacion_id INTEGER NOT NULL,
+    pregunta_id INTEGER NOT NULL,
+    opcion_id INTEGER NOT NULL,
+    acciones INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(votacion_id) REFERENCES votaciones(id),
+    FOREIGN KEY(pregunta_id) REFERENCES preguntas(id),
+    FOREIGN KEY(opcion_id) REFERENCES opciones(id),
+    FOREIGN KEY(user_id) REFERENCES users(id)
+)
+''')
+
 # Usuario administrador por defecto
 c.execute("SELECT id FROM users WHERE username='admin'")
 if not c.fetchone():

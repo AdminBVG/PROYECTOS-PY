@@ -26,7 +26,10 @@ db_lock = threading.Lock()
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret')
-socketio = SocketIO(app)
+
+# Python 3.12 does not support eventlet; use threading for SocketIO
+# Ensure python-socketio and flask-socketio are 5.x for compatibility
+socketio = SocketIO(app, async_mode="threading")
 
 PANEL_ROUTES = {
     'admin': 'panel_admin',
@@ -44,6 +47,19 @@ def get_conn():
     conn.execute('PRAGMA journal_mode=WAL')
     conn.execute('PRAGMA foreign_keys = ON')
     return conn
+
+
+def resumen_acciones():
+    """Calcula totales de acciones por estado y retornos de quórum."""
+    conn = get_conn()
+    rows = conn.execute(
+        'SELECT estado, SUM(acciones) AS acciones FROM asistencia GROUP BY estado'
+    ).fetchall()
+    conn.close()
+    data = {r['estado']: r['acciones'] or 0 for r in rows}
+    total = sum(data.values())
+    activos = sum(v for e, v in data.items() if e in ('PRESENCIAL', 'VIRTUAL'))
+    return total, activos, data
 
 @app.before_request
 def load_user():
@@ -404,6 +420,27 @@ def get_asistencia():
     conn.close()
     return jsonify([dict(r) for r in rows])
 
+
+@app.route('/api/asistencia/resumen')
+@requires_role('asistencia', 'admin', 'votante')
+def asistencia_resumen():
+    """Retorna conteo de acciones por estado y quórum basado en activos."""
+    total, activos, data = resumen_acciones()
+    result = {
+        'acciones_totales': total,
+        'acciones_activas': activos,
+        'quorum': (activos / total * 100) if total else 0,
+        'por_estado': {
+            e: {
+                'acciones': data.get(e, 0),
+                'porcentaje_total': (data.get(e, 0) / total * 100) if total else 0,
+                'porcentaje_activo': (data.get(e, 0) / activos * 100) if activos else 0,
+            }
+            for e in ALLOWED_ESTADOS
+        },
+    }
+    return jsonify(result)
+
 @app.route('/api/asistencia/<int:id>', methods=['POST'])
 @requires_role('asistencia', 'admin')
 def update_asistencia(id):
@@ -464,6 +501,68 @@ def export(fmt):
     else:
         return 'Formato no soportado', 400
     return send_file(fname, as_attachment=True)
+
+
+@app.route('/api/votar', methods=['POST'])
+@requires_role('votante')
+def registrar_voto():
+    """Registra un voto asociando número de acciones a una opción."""
+    if not request.is_json:
+        return jsonify({'error': 'JSON requerido'}), 400
+    data = request.get_json(silent=True) or {}
+    try:
+        votacion_id = int(data.get('votacion_id'))
+        pregunta_id = int(data.get('pregunta_id'))
+        opcion_id = int(data.get('opcion_id'))
+        acciones = int(data.get('acciones'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Datos inválidos'}), 400
+    with db_lock:
+        conn = get_conn()
+        conn.execute(
+            'INSERT INTO votos (votacion_id, pregunta_id, opcion_id, acciones, user_id) VALUES (?,?,?,?,?)',
+            (votacion_id, pregunta_id, opcion_id, acciones, g.user['id'])
+        )
+        conn.commit()
+        conn.close()
+    socketio.emit('voto_registrado', {
+        'votacion_id': votacion_id,
+        'pregunta_id': pregunta_id,
+        'opcion_id': opcion_id,
+        'acciones': acciones,
+    })
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/resultados/<int:votacion_id>')
+@requires_role('votante', 'admin')
+def resultados_votacion(votacion_id):
+    """Resumen de resultados por pregunta basados en acciones activas."""
+    total, activos, _ = resumen_acciones()
+    conn = get_conn()
+    rows = conn.execute(
+        '''SELECT p.id AS pregunta_id, p.texto AS pregunta,
+                  o.id AS opcion_id, o.texto AS opcion,
+                  COALESCE(SUM(v.acciones),0) AS acciones
+           FROM preguntas p
+           JOIN opciones o ON o.pregunta_id = p.id
+           LEFT JOIN votos v ON v.opcion_id = o.id
+           WHERE p.votacion_id = ?
+           GROUP BY o.id
+           ORDER BY p.id, o.id''',
+        (votacion_id,)
+    ).fetchall()
+    conn.close()
+    preguntas = []
+    current = None
+    for r in rows:
+        if not current or current['id'] != r['pregunta_id']:
+            current = {'id': r['pregunta_id'], 'texto': r['pregunta'], 'opciones': []}
+            preguntas.append(current)
+        acc = r['acciones'] or 0
+        pct = (acc / activos * 100) if activos else 0
+        current['opciones'].append({'id': r['opcion_id'], 'texto': r['opcion'], 'acciones': acc, 'porcentaje': pct})
+    return jsonify({'acciones_activas': activos, 'preguntas': preguntas})
 
 if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_DEBUG') == '1'
