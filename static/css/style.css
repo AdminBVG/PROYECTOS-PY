@@ -74,6 +74,50 @@ ul {
     margin-bottom: 15px;
 }
 
+/* Tabs */
+.tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.tabs button {
+    flex: 1;
+    padding: 10px;
+    background: #e0e0e0;
+    border: none;
+    cursor: pointer;
+}
+
+.tabs button.active {
+    background: #007bff;
+    color: #fff;
+}
+
+.tab-section.hidden {
+    display: none;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+table th, table td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: left;
+}
+
+.import, .actions, .filters {
+    margin-bottom: 10px;
+}
+
+canvas {
+    max-width: 100%;
+    margin-top: 15px;
+}
+
 @media (max-width: 600px) {
     .container {
         margin: 10px;

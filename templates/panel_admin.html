@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Panel administrador{% endblock %}
+{% block content %}
+<header class="header">
+  <h1>Panel de Administrador</h1>
+  <a class="logout" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</a>
+</header>
+
+<nav class="tabs">
+  <button data-tab="usuarios" class="active">Usuarios</button>
+  <button data-tab="votaciones">Votaciones</button>
+</nav>
+
+<section id="usuarios" class="tab-section">
+  <div class="card">
+    <h2>Crear usuario</h2>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <form method="post" action="{{ url_for('admin_create_user') }}">
+      <input type="text" name="username" placeholder="Nombre" required>
+      <input type="text" name="cedula" placeholder="Cédula" required>
+      <input type="password" name="password" placeholder="Contraseña" required>
+      <select name="role">
+        <option value="admin">admin</option>
+        <option value="asistencia">asistencia</option>
+        <option value="votante">votante</option>
+      </select>
+      <button type="submit">Crear</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Usuarios registrados</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Cédula</th>
+          <th>Rol</th>
+          <th>Votaciones</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>{{ u['username'] }}</td>
+          <td>{{ u['cedula'] or '' }}</td>
+          <td>{{ u['role'] }}</td>
+          <td>{{ u['votaciones'] or '' }}</td>
+          <td>
+            <form method="post" action="{{ url_for('admin_delete_user', user_id=u['id']) }}" onsubmit="return confirm('¿Eliminar usuario?');">
+              <button type="submit">Eliminar</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Asignar usuario a votación</h2>
+    <form method="post" action="{{ url_for('admin_asignar') }}">
+      <label>Usuario</label>
+      <input type="number" name="user_id" placeholder="ID Usuario" required>
+      <label>Votación</label>
+      <input type="number" name="votacion_id" placeholder="ID Votación" required>
+      <label>Rol</label>
+      <select name="rol">
+        <option value="asistencia">asistencia</option>
+        <option value="votante">votante</option>
+      </select>
+      <button type="submit">Asignar</button>
+    </form>
+  </div>
+</section>
+
+<section id="votaciones" class="tab-section hidden">
+  <div class="card">
+    <h2>Crear votación</h2>
+    <form method="post" action="{{ url_for('admin_create_votacion') }}">
+      <input type="text" name="nombre" placeholder="Nombre de votación" required>
+      <input type="date" name="fecha">
+      <textarea name="preguntas" placeholder="Preguntas (una por línea; opcionalmente separe opciones con | y comas)"></textarea>
+      <button type="submit">Crear</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Votaciones</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Fecha</th>
+          <th># Preguntas</th>
+          <th>Asistentes asignados</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in votaciones %}
+        <tr>
+          <td>{{ v['nombre'] }}</td>
+          <td>{{ v['fecha'] or '' }}</td>
+          <td>{{ v['num_preguntas'] }}</td>
+          <td>{{ v['asistentes'] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll('.tabs button');
+const sections = document.querySelectorAll('.tab-section');
+tabs.forEach(btn => {
+  btn.addEventListener('click', () => {
+    tabs.forEach(b=>b.classList.remove('active'));
+    sections.forEach(s=>s.classList.add('hidden'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.remove('hidden');
+  });
+});
+</script>
+{% endblock %}
