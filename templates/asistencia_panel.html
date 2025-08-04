@@ -1,11 +1,18 @@
-<!doctype html>
-<title>Panel Asistencia</title>
-<h1>Panel de Asistencia</h1>
-<a href="{{ url_for('logout') }}">Cerrar sesión</a>
-<ul>
-{% for v in votaciones %}
-  <li>{{ v['id'] }} - {{ v['nombre'] }}</li>
-{% else %}
-  <li>No hay votaciones asignadas</li>
-{% endfor %}
-</ul>
+{% extends "base.html" %}
+{% block title %}Panel Asistencia{% endblock %}
+{% block content %}
+<header class="header">
+  <h1>Panel de Asistencia</h1>
+  <a class="logout" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</a>
+</header>
+<div class="card">
+  <h2>Votaciones asignadas</h2>
+  <ul>
+    {% for v in votaciones %}
+      <li>{{ v['id'] }} - {{ v['nombre'] }}</li>
+    {% else %}
+      <li>No hay votaciones asignadas</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

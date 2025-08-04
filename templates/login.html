@@ -1,8 +1,13 @@
-<!doctype html>
-<title>Login</title>
-{% if error %}<p style="color:red;">{{ error }}</p>{% endif %}
+{% extends "base.html" %}
+{% block title %}Login{% endblock %}
+{% block content %}
+<h1>Iniciar sesión</h1>
+{% if error %}
+<div class="error">{{ error }}</div>
+{% endif %}
 <form method="post">
-  <input type="text" name="username" placeholder="Usuario" required>
-  <input type="password" name="password" placeholder="Contraseña" required>
-  <button type="submit">Ingresar</button>
+    <input type="text" name="username" placeholder="Usuario" required>
+    <input type="password" name="password" placeholder="Contraseña" required>
+    <button type="submit">Ingresar</button>
 </form>
+{% endblock %}
