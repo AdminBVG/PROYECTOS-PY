@@ -214,7 +214,30 @@ def admin_delete_user(user_id):
 @app.route('/admin/create_votacion', methods=['POST'])
 @requires_role('admin')
 def admin_create_votacion():
-    """Crea una votación con fecha opcional y preguntas."""
+    """Crea una votación recibiendo datos estructurados."""
+    data = request.get_json(silent=True)
+    if data:
+        nombre = data.get('nombre_votacion')
+        fecha = data.get('fecha') or None
+        preguntas = data.get('preguntas', [])
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute('INSERT INTO votaciones (nombre, fecha) VALUES (?, ?)', (nombre, fecha))
+        votacion_id = cur.lastrowid
+        for p in preguntas:
+            texto = p.get('texto', '').strip()
+            if not texto:
+                continue
+            cur.execute('INSERT INTO preguntas (votacion_id, texto) VALUES (?, ?)', (votacion_id, texto))
+            pregunta_id = cur.lastrowid
+            for opt in p.get('opciones', []):
+                opt = opt.strip()
+                if opt:
+                    cur.execute('INSERT INTO opciones (pregunta_id, texto) VALUES (?, ?)', (pregunta_id, opt))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'ok'})
+    # Fallback para formularios antiguos
     nombre = request.form.get('nombre')
     fecha = request.form.get('fecha') or None
     preguntas_raw = request.form.get('preguntas', '')
@@ -222,7 +245,6 @@ def admin_create_votacion():
     cur = conn.cursor()
     cur.execute('INSERT INTO votaciones (nombre, fecha) VALUES (?, ?)', (nombre, fecha))
     votacion_id = cur.lastrowid
-
     for line in preguntas_raw.splitlines():
         line = line.strip()
         if not line:
@@ -235,7 +257,6 @@ def admin_create_votacion():
         pregunta_id = cur.lastrowid
         for opt in [o.strip() for o in opciones.split(',') if o.strip()]:
             cur.execute('INSERT INTO opciones (pregunta_id, texto) VALUES (?, ?)', (pregunta_id, opt))
-
     conn.commit()
     conn.close()
     return redirect(url_for('panel_admin'))

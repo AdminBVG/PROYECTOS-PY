@@ -78,11 +78,12 @@
 <section id="votaciones" class="tab-section hidden">
   <div class="card">
     <h2>Crear votación</h2>
-    <form method="post" action="{{ url_for('admin_create_votacion') }}">
-      <input type="text" name="nombre" placeholder="Nombre de votación" required>
-      <input type="date" name="fecha">
-      <textarea name="preguntas" placeholder="Preguntas (una por línea; opcionalmente separe opciones con | y comas)"></textarea>
-      <button type="submit">Crear</button>
+    <form id="votacion-form" action="{{ url_for('admin_create_votacion') }}">
+      <input type="text" id="nombre_votacion" placeholder="Nombre de votación" required>
+      <input type="date" id="fecha">
+      <div id="preguntas-container"></div>
+      <button type="button" id="add-pregunta">+ Añadir pregunta</button>
+      <button type="submit">Guardar</button>
     </form>
   </div>
 
@@ -111,6 +112,7 @@
   </div>
 </section>
 
+<script src="{{ url_for('static', filename='js/votaciones.js') }}"></script>
 <script>
 const tabs = document.querySelectorAll('.tabs button');
 const sections = document.querySelectorAll('.tab-section');
