@@ -68,18 +68,22 @@
       <input type="date" id="fecha">
       <label>Quórum mínimo (%)</label>
       <input type="number" id="quorum_minimo" min="0" max="100" value="0">
-      <label>Asignar votantes</label>
-      <select id="votantes-select" multiple>
-        {% for u in users if u['role'] == 'votante' %}
-          <option value="{{ u['id'] }}">{{ u['username'] }}</option>
+      <label>Asignar usuarios</label>
+      <table id="usuarios-votacion">
+        <thead>
+          <tr><th>Usuario</th><th>Control de Asistencia</th><th>Control de Votación</th></tr>
+        </thead>
+        <tbody>
+        {% for u in users %}
+          <tr>
+            <td>{{ u['username'] }}</td>
+            <td><input type="checkbox" class="rol-asistencia" value="{{ u['id'] }}"></td>
+            <td><input type="checkbox" class="rol-votante" value="{{ u['id'] }}"></td>
+          </tr>
         {% endfor %}
-      </select>
-      <label>Asignar asistentes</label>
-      <select id="asistentes-select" multiple>
-        {% for u in users if u['role'] == 'asistencia' %}
-          <option value="{{ u['id'] }}">{{ u['username'] }}</option>
-        {% endfor %}
-      </select>
+        </tbody>
+      </table>
+      <div id="resumenRoles"></div>
       <div id="preguntas-container"></div>
       <button type="button" id="add-pregunta">+ Añadir pregunta</button>
       <button type="submit">Guardar</button>
