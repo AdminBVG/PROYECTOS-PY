@@ -8,6 +8,7 @@ from flask_socketio import SocketIO
 import pandas as pd
 from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash, generate_password_hash
+import unicodedata
 
 # Opcional PDF
 try:
@@ -142,7 +143,7 @@ def panel_admin():
         SELECT u.id, u.username, u.cedula, u.role,
                COALESCE(GROUP_CONCAT(v.nombre, ', '), '') AS votaciones
         FROM users u
-        LEFT JOIN votacion_usuarios vu ON vu.user_id = u.id
+        LEFT JOIN usuarios_votacion vu ON vu.user_id = u.id
         LEFT JOIN votaciones v ON v.id = vu.votacion_id
         GROUP BY u.id
     ''').fetchall()
@@ -155,7 +156,7 @@ def panel_admin():
                GROUP_CONCAT(DISTINCT CASE WHEN vu.rol = 'votante' THEN u.username END) AS votantes_nombres
         FROM votaciones v
         LEFT JOIN preguntas p ON p.votacion_id = v.id
-        LEFT JOIN votacion_usuarios vu ON vu.votacion_id = v.id
+        LEFT JOIN usuarios_votacion vu ON vu.votacion_id = v.id
         LEFT JOIN users u ON vu.user_id = u.id
         GROUP BY v.id
     ''').fetchall()
@@ -169,7 +170,7 @@ def panel_asistencia():
     conn = get_conn()
     rol = 'asistencia' if g.user['role'] == 'asistencia' else 'votante'
     votaciones = conn.execute('''SELECT v.* FROM votaciones v
-                                 JOIN votacion_usuarios vu ON v.id = vu.votacion_id
+                                 JOIN usuarios_votacion vu ON v.id = vu.votacion_id
                                  WHERE vu.user_id = ? AND vu.rol = ? ''',
                                (g.user['id'], rol)).fetchall()
     conn.close()
@@ -182,7 +183,7 @@ def panel_asistencia():
 def panel_votacion():
     conn = get_conn()
     rows = conn.execute('''SELECT v.* FROM votaciones v
-                           JOIN votacion_usuarios vu ON v.id = vu.votacion_id
+                           JOIN usuarios_votacion vu ON v.id = vu.votacion_id
                            WHERE vu.user_id = ? AND vu.rol = 'votante' ''',
                          (g.user['id'],)).fetchall()
     votaciones = []
@@ -199,7 +200,7 @@ def panel_votacion():
 def iniciar_votacion(votacion_id):
     conn = get_conn()
     row = conn.execute('''SELECT v.* FROM votaciones v
-                           JOIN votacion_usuarios vu ON v.id=vu.votacion_id
+                           JOIN usuarios_votacion vu ON v.id=vu.votacion_id
                            WHERE v.id=? AND vu.user_id=? AND vu.rol='votante' ''',
                          (votacion_id, g.user['id'])).fetchone()
     if not row:
@@ -218,7 +219,7 @@ def iniciar_votacion(votacion_id):
 @requires_role('votante')
 def preguntas_votacion(votacion_id):
     conn = get_conn()
-    perm = conn.execute('SELECT 1 FROM votacion_usuarios WHERE votacion_id=? AND user_id=? AND rol="votante"', (votacion_id, g.user['id'])).fetchone()
+    perm = conn.execute('SELECT 1 FROM usuarios_votacion WHERE votacion_id=? AND user_id=? AND rol="votante"', (votacion_id, g.user['id'])).fetchone()
     if not perm:
         conn.close()
         return jsonify([]), 403
@@ -235,7 +236,7 @@ def preguntas_votacion(votacion_id):
 @requires_role('votante')
 def asistentes_votacion(votacion_id):
     conn = get_conn()
-    perm = conn.execute('SELECT 1 FROM votacion_usuarios WHERE votacion_id=? AND user_id=? AND rol="votante"', (votacion_id, g.user['id'])).fetchone()
+    perm = conn.execute('SELECT 1 FROM usuarios_votacion WHERE votacion_id=? AND user_id=? AND rol="votante"', (votacion_id, g.user['id'])).fetchone()
     if not perm:
         conn.close()
         return jsonify([]), 403
@@ -268,7 +269,7 @@ def admin_create_user():
             SELECT u.id, u.username, u.cedula, u.role,
                    COALESCE(GROUP_CONCAT(v.nombre, ', '), '') AS votaciones
             FROM users u
-            LEFT JOIN votacion_usuarios vu ON vu.user_id = u.id
+            LEFT JOIN usuarios_votacion vu ON vu.user_id = u.id
             LEFT JOIN votaciones v ON v.id = vu.votacion_id
             GROUP BY u.id
         ''').fetchall()
@@ -278,7 +279,7 @@ def admin_create_user():
                    COUNT(DISTINCT CASE WHEN vu.rol = 'asistencia' THEN vu.user_id END) AS asistentes
             FROM votaciones v
             LEFT JOIN preguntas p ON p.votacion_id = v.id
-            LEFT JOIN votacion_usuarios vu ON vu.votacion_id = v.id
+            LEFT JOIN usuarios_votacion vu ON vu.votacion_id = v.id
             GROUP BY v.id
         ''').fetchall()
         conn.close()
@@ -293,7 +294,7 @@ def admin_delete_user(user_id):
     """Elimina un usuario por ID."""
     conn = get_conn()
     conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
-    conn.execute('DELETE FROM votacion_usuarios WHERE user_id = ?', (user_id,))
+    conn.execute('DELETE FROM usuarios_votacion WHERE user_id = ?', (user_id,))
     conn.commit()
     conn.close()
     return redirect(url_for('panel_admin'))
@@ -326,12 +327,12 @@ def admin_create_votacion():
                     cur.execute('INSERT INTO opciones (pregunta_id, texto) VALUES (?, ?)', (pregunta_id, opt))
         for uid in votantes:
             try:
-                cur.execute('INSERT INTO votacion_usuarios (votacion_id, user_id, rol) VALUES (?,?,?)', (votacion_id, uid, 'votante'))
+                cur.execute('INSERT INTO usuarios_votacion (votacion_id, user_id, rol) VALUES (?,?,?)', (votacion_id, uid, 'votante'))
             except sqlite3.IntegrityError:
                 pass
         for uid in asistentes:
             try:
-                cur.execute('INSERT INTO votacion_usuarios (votacion_id, user_id, rol) VALUES (?,?,?)', (votacion_id, uid, 'asistencia'))
+                cur.execute('INSERT INTO usuarios_votacion (votacion_id, user_id, rol) VALUES (?,?,?)', (votacion_id, uid, 'asistencia'))
             except sqlite3.IntegrityError:
                 pass
         conn.commit()
@@ -366,7 +367,7 @@ def admin_create_votacion():
 def admin_delete_votacion(votacion_id):
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute('DELETE FROM votacion_usuarios WHERE votacion_id=?', (votacion_id,))
+    cur.execute('DELETE FROM usuarios_votacion WHERE votacion_id=?', (votacion_id,))
     cur.execute('DELETE FROM opciones WHERE pregunta_id IN (SELECT id FROM preguntas WHERE votacion_id=?)', (votacion_id,))
     cur.execute('DELETE FROM preguntas WHERE votacion_id=?', (votacion_id,))
     cur.execute('DELETE FROM votaciones WHERE id=?', (votacion_id,))
@@ -386,7 +387,7 @@ def admin_edit_votacion(votacion_id):
     for p in conn.execute('SELECT * FROM preguntas WHERE votacion_id=?', (votacion_id,)).fetchall():
         opts = conn.execute('SELECT texto FROM opciones WHERE pregunta_id=?', (p['id'],)).fetchall()
         preguntas.append({'texto': p['texto'], 'opciones': [o['texto'] for o in opts]})
-    asignados = conn.execute('SELECT user_id, rol FROM votacion_usuarios WHERE votacion_id=?', (votacion_id,)).fetchall()
+    asignados = conn.execute('SELECT user_id, rol FROM usuarios_votacion WHERE votacion_id=?', (votacion_id,)).fetchall()
     votantes = [r['user_id'] for r in asignados if r['rol'] == 'votante']
     asistentes = [r['user_id'] for r in asignados if r['rol'] == 'asistencia']
     users = conn.execute('SELECT id, username, role FROM users').fetchall()
@@ -427,15 +428,15 @@ def admin_update_votacion(votacion_id):
             opt = opt.strip()
             if opt:
                 cur.execute('INSERT INTO opciones (pregunta_id, texto) VALUES (?, ?)', (pregunta_id, opt))
-    cur.execute('DELETE FROM votacion_usuarios WHERE votacion_id=?', (votacion_id,))
+    cur.execute('DELETE FROM usuarios_votacion WHERE votacion_id=?', (votacion_id,))
     for uid in votantes:
         try:
-            cur.execute('INSERT INTO votacion_usuarios (votacion_id, user_id, rol) VALUES (?,?,?)', (votacion_id, uid, 'votante'))
+            cur.execute('INSERT INTO usuarios_votacion (votacion_id, user_id, rol) VALUES (?,?,?)', (votacion_id, uid, 'votante'))
         except sqlite3.IntegrityError:
             pass
     for uid in asistentes:
         try:
-            cur.execute('INSERT INTO votacion_usuarios (votacion_id, user_id, rol) VALUES (?,?,?)', (votacion_id, uid, 'asistencia'))
+            cur.execute('INSERT INTO usuarios_votacion (votacion_id, user_id, rol) VALUES (?,?,?)', (votacion_id, uid, 'asistencia'))
         except sqlite3.IntegrityError:
             pass
     conn.commit()
@@ -448,7 +449,7 @@ def admin_asignar():
     votacion_id = request.form.get('votacion_id')
     rol = request.form.get('rol')
     conn = get_conn()
-    conn.execute('INSERT INTO votacion_usuarios (votacion_id, user_id, rol) VALUES (?,?,?)',
+    conn.execute('INSERT INTO usuarios_votacion (votacion_id, user_id, rol) VALUES (?,?,?)',
                  (votacion_id, user_id, rol))
     conn.commit()
     conn.close()
@@ -472,15 +473,29 @@ def upload():
     f.save(path)
     try:
         df = pd.read_excel(path, engine='openpyxl')
-        required = ['ACCIONISTA', 'REPRESENTANTE LEGAL', 'APODERADO', 'No. ACCIONES']
-        missing = [c for c in required if c not in df.columns]
-        if missing:
-            return jsonify({'error': f"Columnas faltantes: {', '.join(missing)}"}), 400
 
-        if 'ASISTENCIA' not in df.columns:
+        def norm(s: str) -> str:
+            return ''.join(ch for ch in unicodedata.normalize('NFD', s) if ch.isalnum()).upper()
+
+        cols_map = {norm(c): c for c in df.columns}
+        required = {
+            'ACCIONISTA': 'ACCIONISTA',
+            'REPRESENTANTELEGAL': 'REPRESENTANTE LEGAL',
+            'APODERADO': 'APODERADO',
+            'NOACCIONES': 'No. ACCIONES',
+        }
+        missing = [orig for key, orig in required.items() if key not in cols_map]
+        if missing:
+            return jsonify({'error': f"Columnas faltantes o mal escritas: {', '.join(missing)}"}), 400
+
+        rename_map = {cols_map[key]: orig for key, orig in required.items()}
+        df = df.rename(columns=rename_map)
+
+        asis_col = cols_map.get('ASISTENCIA')
+        if not asis_col:
             df['ASISTENCIA'] = 'AUSENTE'
         else:
-            df['ASISTENCIA'] = df['ASISTENCIA'].astype(str).str.strip().str.upper()
+            df['ASISTENCIA'] = df[asis_col].astype(str).str.strip().str.upper()
         df['ASISTENCIA'] = df['ASISTENCIA'].where(df['ASISTENCIA'].isin(ALLOWED_ESTADOS), 'AUSENTE')
 
         df['No. ACCIONES'] = pd.to_numeric(df.get('No. ACCIONES', 0), errors='coerce').fillna(0).astype(int)
@@ -636,12 +651,15 @@ def registrar_voto():
         acciones = int(data.get('acciones'))
     except (TypeError, ValueError):
         return jsonify({'error': 'Datos inválidos'}), 400
-    # Verifica quórum antes de permitir votar
+    # Verifica quórum y permiso antes de permitir votar
     total, activos, _ = resumen_acciones(votacion_id)
     conn = get_conn()
     q_row = conn.execute('SELECT quorum_minimo FROM votaciones WHERE id=?', (votacion_id,)).fetchone()
+    perm = conn.execute('SELECT 1 FROM usuarios_votacion WHERE votacion_id=? AND user_id=? AND rol="votante"', (votacion_id, g.user['id'])).fetchone()
     conn.close()
     quorum_minimo = q_row['quorum_minimo'] if q_row else 0
+    if not perm:
+        return jsonify({'error': 'No autorizado'}), 403
     if total == 0 or (activos / total * 100) < quorum_minimo:
         return jsonify({'error': 'Quórum no alcanzado'}), 403
     with db_lock:

@@ -106,16 +106,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const nombre = document.getElementById('nombre_votacion').value;
     const fecha = document.getElementById('fecha').value;
     const quorum = parseFloat(document.getElementById('quorum_minimo').value || '0');
-    const votantesSelect = document.getElementById('votantes-select');
-    const asistentesSelect = document.getElementById('asistentes-select');
     const preguntas = Array.from(preguntasContainer.children).map(p => {
       const texto = p.querySelector('.pregunta-texto').value;
       const opciones = Array.from(p.querySelectorAll('.opcion input')).map(i => i.value).filter(v => v);
       return { texto, opciones };
     }).filter(p => p.texto);
 
-    const votantes = votantesSelect ? Array.from(votantesSelect.selectedOptions).map(o => o.value) : [];
-    const asistentes = asistentesSelect ? Array.from(asistentesSelect.selectedOptions).map(o => o.value) : [];
+    const votantes = Array.from(document.querySelectorAll('.rol-votante:checked')).map(cb => cb.value);
+    const asistentes = Array.from(document.querySelectorAll('.rol-asistencia:checked')).map(cb => cb.value);
     const data = { nombre_votacion: nombre, fecha, quorum_minimo: quorum, preguntas, votantes, asistentes };
 
     const resp = await fetch(form.action, {
@@ -134,25 +132,33 @@ document.addEventListener('DOMContentLoaded', () => {
   function loadInitial() {
     if (!window.initialData) {
       createPregunta();
+      updateResumenRoles();
       return;
     }
     document.getElementById('nombre_votacion').value = window.initialData.nombre || '';
     if (window.initialData.fecha) document.getElementById('fecha').value = window.initialData.fecha;
     preguntasContainer.innerHTML = '';
     (window.initialData.preguntas || []).forEach(p => createPregunta(p));
-    const vSel = document.getElementById('votantes-select');
-    if (vSel) {
-      Array.from(vSel.options).forEach(o => {
-        if ((window.initialData.votantes || []).includes(parseInt(o.value))) o.selected = true;
-      });
-    }
-    const aSel = document.getElementById('asistentes-select');
-    if (aSel) {
-      Array.from(aSel.options).forEach(o => {
-        if ((window.initialData.asistentes || []).includes(parseInt(o.value))) o.selected = true;
-      });
-    }
+    document.querySelectorAll('.rol-votante').forEach(cb => {
+      if ((window.initialData.votantes || []).includes(parseInt(cb.value))) cb.checked = true;
+    });
+    document.querySelectorAll('.rol-asistencia').forEach(cb => {
+      if ((window.initialData.asistentes || []).includes(parseInt(cb.value))) cb.checked = true;
+    });
     document.getElementById('quorum_minimo').value = window.initialData.quorum_minimo || 0;
+    updateResumenRoles();
+  }
+
+  document.addEventListener('change', (e) => {
+    if (e.target.classList && (e.target.classList.contains('rol-asistencia') || e.target.classList.contains('rol-votante')))
+      updateResumenRoles();
+  });
+
+  function updateResumenRoles() {
+    const asistentes = document.querySelectorAll('.rol-asistencia:checked').length;
+    const votantes = document.querySelectorAll('.rol-votante:checked').length;
+    const resumen = document.getElementById('resumenRoles');
+    if (resumen) resumen.textContent = `Asistencia: ${asistentes} | Votación: ${votantes}`;
   }
 
   loadInitial();

@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const templateBtn = document.getElementById('templateBtn');
   const READONLY = window.READONLY || false;
 
-  const pieChart = new Chart(document.getElementById('pieChart').getContext('2d'), {
+  const pieChart = new Chart(document.getElementById('chartPie').getContext('2d'), {
     type: 'pie',
     data: {
       labels: ['Presencial', 'Virtual', 'Ausente'],
@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     options: { responsive: true, maintainAspectRatio: false }
   });
 
-  const barChart = new Chart(document.getElementById('barChart').getContext('2d'), {
+  const barChart = new Chart(document.getElementById('chartBar').getContext('2d'), {
     type: 'bar',
     data: {
       labels: ['Presencial', 'Virtual', 'Ausente'],
@@ -85,17 +85,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     summary.textContent = `${counts.PRESENCIAL} presenciales / ${counts.VIRTUAL} virtuales / ${counts.AUSENTE} ausentes`;
 
-    renderCharts(counts, acciones);
+    renderCharts({ counts, acciones });
 
     const totalPresentes = counts.PRESENCIAL + counts.VIRTUAL;
     const quorum = parseInt(quorumInput.value || '0', 10);
     quorumInput.style.borderColor = totalPresentes >= quorum ? 'green' : 'red';
   }
 
-  function renderCharts(counts, acciones) {
-    pieChart.data.datasets[0].data = [counts.PRESENCIAL, counts.VIRTUAL, counts.AUSENTE];
+  function renderCharts(stats) {
+    pieChart.data.datasets[0].data = [stats.counts.PRESENCIAL, stats.counts.VIRTUAL, stats.counts.AUSENTE];
     pieChart.update();
-    barChart.data.datasets[0].data = [acciones.PRESENCIAL, acciones.VIRTUAL, acciones.AUSENTE];
+    barChart.data.datasets[0].data = [stats.acciones.PRESENCIAL, stats.acciones.VIRTUAL, stats.acciones.AUSENTE];
     barChart.update();
   }
 

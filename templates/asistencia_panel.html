@@ -16,6 +16,10 @@
 <div class="card">
   <h2>Control de asistencia</h2>
   <div id="clock"></div>
+  <div class="charts">
+    <canvas id="chartPie" width="300" height="300"></canvas>
+    <canvas id="chartBar" width="300" height="300"></canvas>
+  </div>
 
   {% if not readonly %}
   <div class="import">
@@ -23,7 +27,7 @@
     <button id="uploadBtn">Importar</button>
   </div>
   {% endif %}
-  <button id="templateBtn">Exportar plantilla de asistencia</button>
+  <button id="templateBtn">Exportar plantilla base</button>
 
   <div class="filters">
     <input id="search" placeholder="Buscar por nombre">
@@ -46,11 +50,6 @@
     <button id="exportExcel">Exportar Excel</button>
     <button id="exportCsv">Exportar CSV</button>
     <button id="exportPdf">Exportar PDF</button>
-  </div>
-
-  <div class="charts">
-    <canvas id="pieChart" width="300" height="300"></canvas>
-    <canvas id="barChart" width="300" height="300"></canvas>
   </div>
 
   <table id="tablaAsistencia">

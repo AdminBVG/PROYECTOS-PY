@@ -84,11 +84,11 @@ CREATE TABLE IF NOT EXISTS opciones (
 
 # Asignaciones de usuarios a votaciones
 c.execute('''
-CREATE TABLE IF NOT EXISTS votacion_usuarios (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE IF NOT EXISTS usuarios_votacion (
     votacion_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
     rol TEXT CHECK(rol IN ('asistencia','votante')) NOT NULL,
+    PRIMARY KEY (votacion_id, user_id, rol),
     FOREIGN KEY(votacion_id) REFERENCES votaciones(id),
     FOREIGN KEY(user_id) REFERENCES users(id)
 )
