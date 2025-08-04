@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const filter = document.getElementById('filterEstado');
 
   let rows = [];
+  const changed = new Map();
 
   function load() {
     fetch('/api/asistencia')
@@ -27,41 +28,57 @@ document.addEventListener('DOMContentLoaded', () => {
       if (search.value && !cadena.includes(search.value.toLowerCase())) return;
       const tr = document.createElement('tr');
       tr.dataset.id = r.id;
+      const currentEstado = changed.get(r.id) || r.estado;
       tr.innerHTML = `
         <td>${r.accionista || ''}</td>
         <td>${r.representante || ''}</td>
         <td>${r.apoderado || ''}</td>
         <td>
           <select class="estado">
-            <option value="PRESENCIAL" ${r.estado === 'PRESENCIAL' ? 'selected' : ''}>Presente</option>
-            <option value="AUSENTE" ${r.estado === 'AUSENTE' ? 'selected' : ''}>Ausente</option>
-            <option value="VIRTUAL" ${r.estado === 'VIRTUAL' ? 'selected' : ''}>Virtual</option>
+            <option value="PRESENCIAL" ${currentEstado === 'PRESENCIAL' ? 'selected' : ''}>Presente</option>
+            <option value="AUSENTE" ${currentEstado === 'AUSENTE' ? 'selected' : ''}>Ausente</option>
+            <option value="VIRTUAL" ${currentEstado === 'VIRTUAL' ? 'selected' : ''}>Virtual</option>
           </select>
         </td>`;
+      const select = tr.querySelector('select');
+      select.addEventListener('change', () => {
+        changed.set(r.id, select.value);
+      });
       tbody.appendChild(tr);
-      counts[r.estado] = (counts[r.estado] || 0) + 1;
+      counts[currentEstado] = (counts[currentEstado] || 0) + 1;
     });
     summary.textContent = `${counts.PRESENCIAL || 0} presentes / ${counts.AUSENTE || 0} ausentes / ${counts.VIRTUAL || 0} virtual`;
   }
 
-  function guardar() {
-    const peticiones = [...tbody.querySelectorAll('tr')].map(tr => {
-      const id = tr.dataset.id;
-      const estado = tr.querySelector('select').value;
-      return fetch(`/api/asistencia/${id}`, {
+  async function guardar() {
+    if (!changed.size) return;
+    const peticiones = Array.from(changed.entries()).map(([id, estado]) =>
+      fetch(`/api/asistencia/${id}`, {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({estado})
-      });
-    });
-    Promise.all(peticiones);
+      })
+    );
+    try {
+      await Promise.all(peticiones);
+      changed.clear();
+    } catch (err) {
+      console.error(err);
+      alert('Error al guardar cambios');
+    }
   }
 
   document.getElementById('markAll').addEventListener('click', () => {
-    tbody.querySelectorAll('select.estado').forEach(s => s.value = 'PRESENCIAL');
+    tbody.querySelectorAll('select.estado').forEach(s => {
+      s.value = 'PRESENCIAL';
+      changed.set(s.closest('tr').dataset.id, s.value);
+    });
   });
   document.getElementById('clearAll').addEventListener('click', () => {
-    tbody.querySelectorAll('select.estado').forEach(s => s.value = 'AUSENTE');
+    tbody.querySelectorAll('select.estado').forEach(s => {
+      s.value = 'AUSENTE';
+      changed.set(s.closest('tr').dataset.id, s.value);
+    });
   });
   document.getElementById('save').addEventListener('click', guardar);
   search.addEventListener('input', render);
@@ -71,7 +88,9 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(() => {
     document.getElementById('clock').textContent = new Date().toLocaleTimeString();
   }, 1000);
-  setInterval(guardar, 30000);
+  setInterval(() => {
+    if (changed.size) guardar();
+  }, 30000);
 
   load();
 });

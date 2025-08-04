@@ -24,8 +24,16 @@ db_lock = threading.Lock()
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.secret_key = 'dev-secret'
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret')
 socketio = SocketIO(app)
+
+PANEL_ROUTES = {
+    'admin': 'panel_admin',
+    'asistencia': 'panel_asistencia',
+    'votante': 'panel_votacion',
+}
+
+ALLOWED_ESTADOS = ('PRESENCIAL', 'VIRTUAL', 'AUSENTE')
 
 # --- Helpers ---
 
@@ -74,7 +82,8 @@ def login():
         conn.close()
         if user and check_password_hash(user['password'], password):
             session['user_id'] = user['id']
-            return redirect(url_for(f"panel_{user['role']}"))
+            route = PANEL_ROUTES.get(user['role'])
+            return redirect(url_for(route)) if route else redirect(url_for('login'))
         return render_template('login.html', error='Credenciales inválidas')
     return render_template('login.html')
 
@@ -87,14 +96,17 @@ def logout():
 @app.route('/')
 def index():
     if g.user:
-        return redirect(url_for(f"panel_{g.user['role']}"))
+        route = PANEL_ROUTES.get(g.user['role'])
+        if route:
+            return redirect(url_for(route))
     return redirect(url_for('login'))
 
 @app.route('/panel')
 @login_required
 def panel_redirect():
     """Deprecated helper that redirects to the panel según rol."""
-    return redirect(url_for(f"panel_{g.user['role']}"))
+    route = PANEL_ROUTES.get(g.user['role'])
+    return redirect(url_for(route)) if route else redirect(url_for('login'))
 
 @app.route('/panel_admin')
 @login_required
@@ -190,8 +202,14 @@ def upload():
         df = pd.read_excel(path)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    df['ASISTENCIA'] = df.get('ASISTENCIA', '').astype(str).str.strip().str.upper()
-    df['ASISTENCIA'] = df['ASISTENCIA'].where(df['ASISTENCIA'].isin(['PRESENCIAL','VIRTUAL','AUSENTE']), 'AUSENTE')
+
+    if 'ASISTENCIA' not in df.columns:
+        df['ASISTENCIA'] = 'AUSENTE'
+    else:
+        df['ASISTENCIA'] = df['ASISTENCIA'].astype(str).str.strip().str.upper()
+    df['ASISTENCIA'] = df['ASISTENCIA'].where(df['ASISTENCIA'].isin(ALLOWED_ESTADOS), 'AUSENTE')
+
+    df['No. ACCIONES'] = pd.to_numeric(df.get('No. ACCIONES', 0), errors='coerce').fillna(0).astype(int)
     with db_lock:
         conn = get_conn()
         try:
@@ -203,7 +221,7 @@ def upload():
                         r.get('ACCIONISTA'),
                         r.get('REPRESENTANTE LEGAL'),
                         r.get('APODERADO'),
-                        int(r.get('No. ACCIONES', 0) or 0),
+                        int(r['No. ACCIONES']),
                         r['ASISTENCIA']
                     )
                 )
@@ -223,14 +241,19 @@ def get_asistencia():
 @app.route('/api/asistencia/<int:id>', methods=['POST'])
 @requires_role('asistencia', 'admin')
 def update_asistencia(id):
-    new_estado = request.json.get('estado')
+    new_estado = request.json.get('estado', '').upper()
+    if new_estado not in ALLOWED_ESTADOS:
+        return jsonify({'error': 'Estado inválido'}), 400
     with db_lock:
         conn = get_conn()
-        conn.execute('UPDATE asistencia SET estado = ? WHERE id = ?', (new_estado, id))
+        cur = conn.execute('UPDATE asistencia SET estado = ? WHERE id = ?', (new_estado, id))
         conn.commit()
+        updated = cur.rowcount
         conn.close()
-    socketio.emit('estado_changed', {'id': id, 'estado': new_estado})
-    return ('', 204)
+    if updated:
+        socketio.emit('estado_changed', {'id': id, 'estado': new_estado})
+        return ('', 204)
+    return jsonify({'error': 'Registro no encontrado'}), 404
 
 @app.route('/export/<fmt>')
 @requires_role('asistencia', 'admin')
@@ -264,4 +287,5 @@ def export(fmt):
     return send_file(fname, as_attachment=True)
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    debug_mode = os.environ.get('FLASK_DEBUG') == '1'
+    socketio.run(app, host='0.0.0.0', port=5000, debug=debug_mode)
