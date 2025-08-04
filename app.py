@@ -41,6 +41,7 @@ def get_conn():
     conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA foreign_keys = ON')
     return conn
 
 @app.before_request
@@ -151,9 +152,16 @@ def admin_create_user():
     password = request.form.get('password')
     role = request.form.get('role')
     conn = get_conn()
-    conn.execute('INSERT INTO users (username, password, role) VALUES (?,?,?)',
-                 (username, generate_password_hash(password), role))
-    conn.commit()
+    try:
+        conn.execute('INSERT INTO users (username, password, role) VALUES (?,?,?)',
+                     (username, generate_password_hash(password), role))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        users = conn.execute('SELECT id, username, role FROM users').fetchall()
+        votaciones = conn.execute('SELECT * FROM votaciones').fetchall()
+        conn.close()
+        return render_template('admin_panel.html', users=users, votaciones=votaciones,
+                               error='Nombre de usuario ya existe')
     conn.close()
     return redirect(url_for('panel_admin'))
 
@@ -200,35 +208,40 @@ def upload():
     f.save(path)
     try:
         df = pd.read_excel(path)
+
+        if 'ASISTENCIA' not in df.columns:
+            df['ASISTENCIA'] = 'AUSENTE'
+        else:
+            df['ASISTENCIA'] = df['ASISTENCIA'].astype(str).str.strip().str.upper()
+        df['ASISTENCIA'] = df['ASISTENCIA'].where(df['ASISTENCIA'].isin(ALLOWED_ESTADOS), 'AUSENTE')
+
+        df['No. ACCIONES'] = pd.to_numeric(df.get('No. ACCIONES', 0), errors='coerce').fillna(0).astype(int)
+        with db_lock:
+            conn = get_conn()
+            try:
+                conn.execute('DELETE FROM asistencia')
+                for _, r in df.iterrows():
+                    conn.execute(
+                        'INSERT INTO asistencia (accionista,representante,apoderado,acciones,estado) VALUES (?,?,?,?,?)',
+                        (
+                            r.get('ACCIONISTA'),
+                            r.get('REPRESENTANTE LEGAL'),
+                            r.get('APODERADO'),
+                            int(r['No. ACCIONES']),
+                            r['ASISTENCIA']
+                        )
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+        return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-    if 'ASISTENCIA' not in df.columns:
-        df['ASISTENCIA'] = 'AUSENTE'
-    else:
-        df['ASISTENCIA'] = df['ASISTENCIA'].astype(str).str.strip().str.upper()
-    df['ASISTENCIA'] = df['ASISTENCIA'].where(df['ASISTENCIA'].isin(ALLOWED_ESTADOS), 'AUSENTE')
-
-    df['No. ACCIONES'] = pd.to_numeric(df.get('No. ACCIONES', 0), errors='coerce').fillna(0).astype(int)
-    with db_lock:
-        conn = get_conn()
+    finally:
         try:
-            conn.execute('DELETE FROM asistencia')
-            for _, r in df.iterrows():
-                conn.execute(
-                    'INSERT INTO asistencia (accionista,representante,apoderado,acciones,estado) VALUES (?,?,?,?,?)',
-                    (
-                        r.get('ACCIONISTA'),
-                        r.get('REPRESENTANTE LEGAL'),
-                        r.get('APODERADO'),
-                        int(r['No. ACCIONES']),
-                        r['ASISTENCIA']
-                    )
-                )
-            conn.commit()
-        finally:
-            conn.close()
-    return jsonify({'ok': True})
+            os.remove(path)
+        except OSError:
+            pass
 
 @app.route('/api/asistencia')
 @requires_role('asistencia', 'admin')
@@ -241,7 +254,10 @@ def get_asistencia():
 @app.route('/api/asistencia/<int:id>', methods=['POST'])
 @requires_role('asistencia', 'admin')
 def update_asistencia(id):
-    new_estado = request.json.get('estado', '').upper()
+    if not request.is_json:
+        return jsonify({'error': 'JSON requerido'}), 400
+    data = request.get_json(silent=True) or {}
+    new_estado = str(data.get('estado', '')).upper()
     if new_estado not in ALLOWED_ESTADOS:
         return jsonify({'error': 'Estado inválido'}), 400
     with db_lock:
