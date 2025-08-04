@@ -1,0 +1,47 @@
+<!doctype html>
+<title>Admin Panel</title>
+<h1>Panel de Administrador</h1>
+<a href="{{ url_for('logout') }}">Cerrar sesión</a>
+
+<h2>Crear usuario</h2>
+<form method="post" action="{{ url_for('admin_create_user') }}">
+  <input type="text" name="username" placeholder="Usuario" required>
+  <input type="password" name="password" placeholder="Contraseña" required>
+  <select name="role">
+    <option value="admin">admin</option>
+    <option value="asistencia">asistencia</option>
+    <option value="votante">votante</option>
+  </select>
+  <button type="submit">Crear</button>
+</form>
+
+<h2>Crear votación</h2>
+<form method="post" action="{{ url_for('admin_create_votacion') }}">
+  <input type="text" name="nombre" placeholder="Nombre" required>
+  <button type="submit">Crear</button>
+</form>
+
+<h2>Asignar usuario a votación</h2>
+<form method="post" action="{{ url_for('admin_asignar') }}">
+  <input type="number" name="user_id" placeholder="ID Usuario" required>
+  <input type="number" name="votacion_id" placeholder="ID Votación" required>
+  <select name="rol">
+    <option value="asistencia">asistencia</option>
+    <option value="votante">votante</option>
+  </select>
+  <button type="submit">Asignar</button>
+</form>
+
+<h2>Usuarios</h2>
+<ul>
+{% for u in users %}
+  <li>{{ u['id'] }} - {{ u['username'] }} ({{ u['role'] }})</li>
+{% endfor %}
+</ul>
+
+<h2>Votaciones</h2>
+<ul>
+{% for v in votaciones %}
+  <li>{{ v['id'] }} - {{ v['nombre'] }}</li>
+{% endfor %}
+</ul>
