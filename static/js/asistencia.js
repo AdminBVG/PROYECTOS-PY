@@ -77,14 +77,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     summary.textContent = `${counts.PRESENCIAL} presenciales / ${counts.VIRTUAL} virtuales / ${counts.AUSENTE} ausentes`;
 
-    pieChart.data.datasets[0].data = [counts.PRESENCIAL, counts.VIRTUAL, counts.AUSENTE];
-    pieChart.update();
-    barChart.data.datasets[0].data = [acciones.PRESENCIAL, acciones.VIRTUAL, acciones.AUSENTE];
-    barChart.update();
+    renderCharts(counts, acciones);
 
     const totalPresentes = counts.PRESENCIAL + counts.VIRTUAL;
     const quorum = parseInt(quorumInput.value || '0', 10);
     quorumInput.style.borderColor = totalPresentes >= quorum ? 'green' : 'red';
+  }
+
+  function renderCharts(counts, acciones) {
+    pieChart.data.datasets[0].data = [counts.PRESENCIAL, counts.VIRTUAL, counts.AUSENTE];
+    pieChart.update();
+    barChart.data.datasets[0].data = [acciones.PRESENCIAL, acciones.VIRTUAL, acciones.AUSENTE];
+    barChart.update();
   }
 
   socket.on('estado_changed', ({ id, estado }) => {

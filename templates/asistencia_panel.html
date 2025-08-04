@@ -46,6 +46,11 @@
     <button id="exportPdf">Exportar PDF</button>
   </div>
 
+  <div class="charts">
+    <canvas id="pieChart" width="300" height="300"></canvas>
+    <canvas id="barChart" width="300" height="300"></canvas>
+  </div>
+
   <table id="tablaAsistencia">
     <thead>
       <tr>
@@ -60,10 +65,6 @@
   </table>
 
   <div id="summary"></div>
-  <div class="charts">
-    <canvas id="pieChart" width="300" height="300"></canvas>
-    <canvas id="barChart" width="300" height="300"></canvas>
-  </div>
 </div>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
