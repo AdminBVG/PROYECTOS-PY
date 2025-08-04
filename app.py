@@ -164,15 +164,17 @@ def panel_admin():
 
 @app.route('/panel_asistencia')
 @login_required
-@requires_role('asistencia')
+@requires_role('asistencia', 'votante')
 def panel_asistencia():
     conn = get_conn()
+    rol = 'asistencia' if g.user['role'] == 'asistencia' else 'votante'
     votaciones = conn.execute('''SELECT v.* FROM votaciones v
                                  JOIN votacion_usuarios vu ON v.id = vu.votacion_id
-                                 WHERE vu.user_id = ? AND vu.rol = 'asistencia' ''',
-                               (g.user['id'],)).fetchall()
+                                 WHERE vu.user_id = ? AND vu.rol = ? ''',
+                               (g.user['id'], rol)).fetchall()
     conn.close()
-    return render_template('asistencia_panel.html', votaciones=votaciones)
+    readonly = g.user['role'] == 'votante'
+    return render_template('asistencia_panel.html', votaciones=votaciones, readonly=readonly)
 
 @app.route('/panel_votacion')
 @login_required
@@ -190,6 +192,59 @@ def panel_votacion():
         votaciones.append({**dict(v), 'quorum_ok': pct >= (v['quorum_minimo'] or 0), 'porcentaje': pct})
     conn.close()
     return render_template('votante_panel.html', votaciones=votaciones)
+
+@app.route('/votacion/<int:votacion_id>')
+@login_required
+@requires_role('votante')
+def iniciar_votacion(votacion_id):
+    conn = get_conn()
+    row = conn.execute('''SELECT v.* FROM votaciones v
+                           JOIN votacion_usuarios vu ON v.id=vu.votacion_id
+                           WHERE v.id=? AND vu.user_id=? AND vu.rol='votante' ''',
+                         (votacion_id, g.user['id'])).fetchone()
+    if not row:
+        conn.close()
+        return redirect(url_for('panel_votacion'))
+    total, activos, _ = resumen_acciones(votacion_id)
+    pct = (activos / total * 100) if total else 0
+    if pct < (row['quorum_minimo'] or 0):
+        conn.close()
+        return redirect(url_for('panel_votacion'))
+    conn.close()
+    return render_template('votacion_registro.html', votacion=row)
+
+@app.route('/api/votacion/<int:votacion_id>/preguntas')
+@login_required
+@requires_role('votante')
+def preguntas_votacion(votacion_id):
+    conn = get_conn()
+    perm = conn.execute('SELECT 1 FROM votacion_usuarios WHERE votacion_id=? AND user_id=? AND rol="votante"', (votacion_id, g.user['id'])).fetchone()
+    if not perm:
+        conn.close()
+        return jsonify([]), 403
+    rows = conn.execute('SELECT id, texto FROM preguntas WHERE votacion_id=?', (votacion_id,)).fetchall()
+    data = []
+    for p in rows:
+        opts = conn.execute('SELECT id, texto FROM opciones WHERE pregunta_id=?', (p['id'],)).fetchall()
+        data.append({'id': p['id'], 'texto': p['texto'], 'opciones': [dict(o) for o in opts]})
+    conn.close()
+    return jsonify(data)
+
+@app.route('/api/votacion/<int:votacion_id>/asistentes')
+@login_required
+@requires_role('votante')
+def asistentes_votacion(votacion_id):
+    conn = get_conn()
+    perm = conn.execute('SELECT 1 FROM votacion_usuarios WHERE votacion_id=? AND user_id=? AND rol="votante"', (votacion_id, g.user['id'])).fetchone()
+    if not perm:
+        conn.close()
+        return jsonify([]), 403
+    rows = conn.execute(
+        'SELECT id, accionista, representante, apoderado, acciones FROM asistencia WHERE votacion_id=? AND estado IN ("PRESENCIAL","VIRTUAL")',
+        (votacion_id,)
+    ).fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
 
 # --- Admin ---
 
@@ -416,7 +471,11 @@ def upload():
     path = os.path.join(app.config['UPLOAD_FOLDER'], name)
     f.save(path)
     try:
-        df = pd.read_excel(path)
+        df = pd.read_excel(path, engine='openpyxl')
+        required = ['ACCIONISTA', 'REPRESENTANTE LEGAL', 'APODERADO', 'No. ACCIONES']
+        missing = [c for c in required if c not in df.columns]
+        if missing:
+            return jsonify({'error': f"Columnas faltantes: {', '.join(missing)}"}), 400
 
         if 'ASISTENCIA' not in df.columns:
             df['ASISTENCIA'] = 'AUSENTE'
@@ -454,7 +513,7 @@ def upload():
             pass
 
 @app.route('/api/asistencia')
-@requires_role('asistencia', 'admin')
+@requires_role('asistencia', 'admin', 'votante')
 def get_asistencia():
     votacion_id = request.args.get('votacion_id', type=int)
     if not votacion_id:
@@ -521,7 +580,7 @@ def update_asistencia(id):
 @requires_role('asistencia', 'admin')
 def plantilla_asistencia():
     """Genera una plantilla vacía de asistencia en formato Excel."""
-    df = pd.DataFrame(columns=['id', 'accionista', 'representante', 'apoderado', 'acciones', 'estado'])
+    df = pd.DataFrame(columns=['ACCIONISTA', 'REPRESENTANTE LEGAL', 'APODERADO', 'No. ACCIONES', 'ASISTENCIA'])
     output = BytesIO()
     df.to_excel(output, index=False)
     output.seek(0)
