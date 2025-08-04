@@ -124,3 +124,63 @@ canvas {
         padding: 15px;
     }
 }
+
+/* --- Formulario dinámico de votaciones --- */
+#preguntas-container .pregunta {
+    border: 1px solid #ddd;
+    padding: 10px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+}
+
+.pregunta-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.pregunta button,
+.opcion button,
+#add-pregunta {
+    width: auto;
+    display: inline-block;
+    margin-bottom: 5px;
+    padding: 5px 10px;
+}
+
+.opcion {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 5px;
+}
+
+.opcion input {
+    flex: 1;
+}
+
+.pregunta button.remove-pregunta,
+.opcion button.remove-opcion {
+    background: #dc3545;
+}
+
+.pregunta button.remove-pregunta:hover,
+.opcion button.remove-opcion:hover {
+    background: #c82333;
+}
+
+.pregunta button.add-opcion {
+    background: #28a745;
+}
+
+.pregunta button.add-opcion:hover {
+    background: #218838;
+}
+
+#add-pregunta {
+    background: #17a2b8;
+}
+
+#add-pregunta:hover {
+    background: #138496;
+}
