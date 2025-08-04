@@ -118,6 +118,18 @@ canvas {
     margin-top: 15px;
 }
 
+.charts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+}
+
+.charts canvas {
+    width: 300px;
+    height: 300px;
+}
+
 @media (max-width: 600px) {
     .container {
         margin: 10px;
