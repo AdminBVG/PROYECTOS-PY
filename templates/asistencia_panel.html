@@ -15,4 +15,35 @@
     {% endfor %}
   </ul>
 </div>
+<div class="card">
+  <h2>Control de asistencia</h2>
+  <div id="clock"></div>
+  <div class="filters">
+    <input id="search" placeholder="Buscar por nombre">
+    <select id="filterEstado">
+      <option value="">Todos</option>
+      <option value="PRESENCIAL">Presente</option>
+      <option value="AUSENTE">Ausente</option>
+      <option value="VIRTUAL">Virtual</option>
+    </select>
+  </div>
+  <div class="actions">
+    <button id="markAll">Marcar todos como presentes</button>
+    <button id="clearAll">Limpiar asistencia</button>
+    <button id="save">Guardar</button>
+  </div>
+  <table id="tablaAsistencia">
+    <thead>
+      <tr>
+        <th>Accionista</th>
+        <th>Representante</th>
+        <th>Apoderado</th>
+        <th>Estado</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <div id="summary"></div>
+</div>
+<script src="{{ url_for('static', filename='js/asistencia.js') }}"></script>
 {% endblock %}

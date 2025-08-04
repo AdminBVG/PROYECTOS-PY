@@ -74,7 +74,7 @@ def login():
         conn.close()
         if user and check_password_hash(user['password'], password):
             session['user_id'] = user['id']
-            return redirect(url_for('panel'))
+            return redirect(url_for(f"panel_{user['role']}"))
         return render_template('login.html', error='Credenciales inválidas')
     return render_template('login.html')
 
@@ -87,34 +87,48 @@ def logout():
 @app.route('/')
 def index():
     if g.user:
-        return redirect(url_for('panel'))
+        return redirect(url_for(f"panel_{g.user['role']}"))
     return redirect(url_for('login'))
 
 @app.route('/panel')
 @login_required
-def panel():
-    if g.user['role'] == 'admin':
-        conn = get_conn()
-        users = conn.execute('SELECT id, username, role FROM users').fetchall()
-        votaciones = conn.execute('SELECT * FROM votaciones').fetchall()
-        conn.close()
-        return render_template('admin_panel.html', users=users, votaciones=votaciones)
-    elif g.user['role'] == 'asistencia':
-        conn = get_conn()
-        votaciones = conn.execute('''SELECT v.* FROM votaciones v
-                                     JOIN votacion_usuarios vu ON v.id = vu.votacion_id
-                                     WHERE vu.user_id = ? AND vu.rol = 'asistencia' ''',
-                                   (g.user['id'],)).fetchall()
-        conn.close()
-        return render_template('asistencia_panel.html', votaciones=votaciones)
-    else:
-        conn = get_conn()
-        votaciones = conn.execute('''SELECT v.* FROM votaciones v
-                                     JOIN votacion_usuarios vu ON v.id = vu.votacion_id
-                                     WHERE vu.user_id = ? AND vu.rol = 'votante' ''',
-                                   (g.user['id'],)).fetchall()
-        conn.close()
-        return render_template('votante_panel.html', votaciones=votaciones)
+def panel_redirect():
+    """Deprecated helper that redirects to the panel según rol."""
+    return redirect(url_for(f"panel_{g.user['role']}"))
+
+@app.route('/panel_admin')
+@login_required
+@requires_role('admin')
+def panel_admin():
+    conn = get_conn()
+    users = conn.execute('SELECT id, username, role FROM users').fetchall()
+    votaciones = conn.execute('SELECT * FROM votaciones').fetchall()
+    conn.close()
+    return render_template('admin_panel.html', users=users, votaciones=votaciones)
+
+@app.route('/panel_asistencia')
+@login_required
+@requires_role('asistencia')
+def panel_asistencia():
+    conn = get_conn()
+    votaciones = conn.execute('''SELECT v.* FROM votaciones v
+                                 JOIN votacion_usuarios vu ON v.id = vu.votacion_id
+                                 WHERE vu.user_id = ? AND vu.rol = 'asistencia' ''',
+                               (g.user['id'],)).fetchall()
+    conn.close()
+    return render_template('asistencia_panel.html', votaciones=votaciones)
+
+@app.route('/panel_votacion')
+@login_required
+@requires_role('votante')
+def panel_votacion():
+    conn = get_conn()
+    votaciones = conn.execute('''SELECT v.* FROM votaciones v
+                                 JOIN votacion_usuarios vu ON v.id = vu.votacion_id
+                                 WHERE vu.user_id = ? AND vu.rol = 'votante' ''',
+                               (g.user['id'],)).fetchall()
+    conn.close()
+    return render_template('votante_panel.html', votaciones=votaciones)
 
 # --- Admin ---
 
@@ -129,7 +143,7 @@ def admin_create_user():
                  (username, generate_password_hash(password), role))
     conn.commit()
     conn.close()
-    return redirect(url_for('panel'))
+    return redirect(url_for('panel_admin'))
 
 @app.route('/admin/create_votacion', methods=['POST'])
 @requires_role('admin')
@@ -142,7 +156,7 @@ def admin_create_votacion():
     cur.execute('INSERT INTO preguntas (votacion_id, texto) VALUES (?, ?)', (votacion_id, 'Pregunta 1'))
     conn.commit()
     conn.close()
-    return redirect(url_for('panel'))
+    return redirect(url_for('panel_admin'))
 
 @app.route('/admin/asignar', methods=['POST'])
 @requires_role('admin')
@@ -155,7 +169,7 @@ def admin_asignar():
                  (votacion_id, user_id, rol))
     conn.commit()
     conn.close()
-    return redirect(url_for('panel'))
+    return redirect(url_for('panel_admin'))
 
 # --- Asistencia existente ---
 
